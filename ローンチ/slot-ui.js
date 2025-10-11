@@ -1,0 +1,1837 @@
+/**
+ * 阪大作問サークルスロットのUI制御部分
+ * 表示とユーザーインタラクションを担当
+ */
+
+class SlotUI {
+    constructor() {
+        // グローバルのスロットロジックを使用
+        this.logic = window.slotLogic;
+        this.audio = new window.SlotAudio();
+        this.ranking = new window.SlotRanking();
+        
+        // DOM要素の取得
+        this.reels = [
+            document.getElementById('reel1'),
+            document.getElementById('reel2'),
+            document.getElementById('reel3')
+        ];
+        
+        this.startButton = document.getElementById('startButton');
+        this.stopButton = document.getElementById('stopButton');
+        this.scoreDisplay = document.getElementById('scoreDisplay');
+        // resultDisplayは削除済み
+        // this.questionDisplay = document.getElementById('questionDisplay'); // 削除済み
+        this.answerChoices = document.getElementById('answerChoices');
+        this.debugDisplay = document.getElementById('debugDisplay');
+        this.debugRowNumbers = document.getElementById('debugRowNumbers');
+        // this.timeRemaining = document.getElementById('timeRemaining'); // 削除済み
+        // this.totalQuestions = document.getElementById('totalQuestions'); // 削除済み
+        // this.consecutiveCorrect = document.getElementById('consecutiveCorrect'); // 削除済み
+        
+        
+        // 状態管理
+        this.isSpinning = [false, false, false];
+        this.spinIntervals = [null, null, null];
+        this.finalPositions = [0, 0, 0];
+        this.currentQuestions = [null, null, null]; // 現在の問題文状態
+        this.currentQuestionData = null; // 現在の問題データ
+        this.score = { totalQuestions: 0, consecutiveCorrect: 0, correctAnswers: 0, maxConsecutive: 0 };
+        this.gameTimer = null;
+        this.timeLeft = 60; // 60秒
+        this.gameStarted = false;
+        
+        // ランクイン音再生フラグ（1回のみ再生のため）
+        this.hasPlayedRankinGako = false;
+        
+        // 初期化はデータが読み込まれた後に実行
+        console.log('SlotUI初期化完了 - データの読み込みを待機中');
+    }
+    
+    /**
+     * データが読み込まれた後に初期化
+     */
+    initialize() {
+        console.log('SlotUI初期化開始');
+        
+        // データの初期化
+        this.initializeData();
+        
+        // ロジック層からシンボルを動的生成（データ初期化後に実行）
+        this.syncGeometry();
+        this.initializeEventListeners();
+        
+        console.log('SlotUI初期化完了');
+    }
+    
+    /**
+     * データの初期化
+     */
+    async initializeData() {
+        try {
+            // データが読み込まれているかチェック
+            if (!this.logic.isDataReady()) {
+                console.error('データが読み込まれていません');
+                alert('データが読み込まれていません。まずExcelファイルをアップロードしてください。');
+                return;
+            }
+            
+            // リールを初期化
+            this.initializeReels();
+            console.log('データの初期化が完了しました');
+        } catch (error) {
+            console.error('データ初期化エラー:', error);
+            alert('データの初期化に失敗しました: ' + error.message);
+        }
+    }
+    
+    /**
+     * エラーメッセージを表示
+     */
+    showError(message) {
+        alert(message);
+        console.error(message);
+    }
+
+    /**
+     * デバッグ表示を更新
+     * @param {Object} questionData - 問題データ（行番号を含む）
+     */
+    updateDebugDisplay(questionData) {
+        if (!this.debugRowNumbers || !questionData) {
+            return;
+        }
+
+        const answerData = questionData.answer;
+        if (answerData) {
+            this.debugRowNumbers.innerHTML = `
+                <div>左リール行番号: ${answerData.row_L}</div>
+                <div>中央リール行番号: ${answerData.row_C}</div>
+                <div>右リール行番号: ${answerData.row_R}</div>
+                <div style="margin-top: 10px; font-size: 12px; color: #ccc;">
+                    問題文:<br>
+                    左: ${questionData.left.question}<br>
+                    中央: ${questionData.center.question}<br>
+                    右: ${questionData.right.question}
+                </div>
+            `;
+        } else {
+            this.debugRowNumbers.innerHTML = '<div>行番号: 未選択</div>';
+        }
+    }
+    
+    
+    /**
+     * リールの初期化（ロジック層からシンボルを取得）
+     */
+    initializeReels() {
+        const reelTypes = ['left', 'center', 'right'];
+        this.reels.forEach((reel, reelIndex) => {
+            this.updateReel(reelIndex, reelTypes[reelIndex]);
+        });
+        
+        // リール初期化後に幾何情報を同期
+        setTimeout(() => {
+            this.syncGeometry();
+            console.log('幾何情報同期完了:', {
+                symbolHeight: this.logic.symbolHeight,
+                visibleRows: this.logic.visibleRows
+            });
+        }, 100);
+    }
+    
+    /**
+     * 指定されたリールを更新
+     * @param {number} reelIndex - リールのインデックス
+     * @param {string} reelType - リールの種類
+     */
+    updateReel(reelIndex, reelType) {
+        const reel = this.reels[reelIndex];
+        
+        // 既存のシンボルをクリア
+        reel.innerHTML = '';
+        
+        // ロジック層から現在のシンボル配列を取得して動的生成
+        const reelSymbols = this.logic.generateReelSymbols(reelType);
+        reelSymbols.forEach(symbol => {
+            const symbolElement = document.createElement('div');
+            symbolElement.className = 'slot-symbol';
+            symbolElement.textContent = symbol;
+            reel.appendChild(symbolElement);
+        });
+    }
+    
+    /**
+     * 全リールを更新（シンボル変更時に使用）
+     */
+    updateAllReels() {
+        const reelTypes = ['left', 'center', 'right'];
+        this.reels.forEach((reel, reelIndex) => {
+            this.updateReel(reelIndex, reelTypes[reelIndex]);
+        });
+        
+        // 全てのリール更新後に幾何情報を同期
+        setTimeout(() => {
+            this.syncGeometry();
+        }, 100);
+    }
+    
+    /**
+     * イベントリスナーの初期化
+     */
+    initializeEventListeners() {
+        this.startButton.addEventListener('click', () => {
+            this.startGame();
+        });
+        this.stopButton.addEventListener('click', () => {
+            this.audio.playButtonPushedSound();
+            this.stopGame();
+        });
+        
+        // キーボードショートカット
+        document.addEventListener('keydown', (event) => {
+            // 結果表示時のESCキーでメニューに戻る
+            if (event.key === 'Escape' && this.isResultPopupVisible()) {
+                this.returnToMenu();
+            }
+            // ゲーム中のESCキーでゲーム中断
+            else if (event.key === 'Escape' && this.gameStarted) {
+                this.stopGame();
+            }
+            
+            // プレイ中でない時のEnterキーでスタート
+            if (event.key === 'Enter' && !this.gameStarted) {
+                this.startGame();
+            }
+            
+            // 結果表示時のEnterキーで再プレイ
+            if (event.key === 'Enter' && this.isResultPopupVisible()) {
+                this.restartGame();
+            }
+            
+            // 選択肢表示時の1,2,3キーで選択
+            if (this.answerChoices.style.visibility === 'visible' && 
+                (event.key === '1' || event.key === '2' || event.key === '3')) {
+                const choiceIndex = parseInt(event.key) - 1;
+                const choiceButtons = this.answerChoices.querySelectorAll('.answer-choice');
+                if (choiceButtons[choiceIndex]) {
+                    choiceButtons[choiceIndex].click();
+                }
+            }
+        });
+    }
+    
+    /**
+     * ゲーム開始
+     */
+    async startGame() {
+        if (this.gameStarted) return;
+        
+        // データが読み込まれているかチェック
+        if (!this.logic.isDataReady()) {
+            console.error('データが読み込まれていません。ゲームを開始できません。');
+            alert('データが読み込まれていません。ページを再読み込みしてください。');
+            return;
+        }
+        
+        // ゲーム開始前に幾何情報を再同期
+        this.syncGeometry();
+        console.log('ゲーム開始時の幾何情報:', {
+            symbolHeight: this.logic.symbolHeight,
+            visibleRows: this.logic.visibleRows
+        });
+        
+        this.gameStarted = true;
+        
+        // 音響システムを有効化（ユーザーインタラクション必須）
+        await this.audio.enableAudio();
+        
+        // ゲーム状態をリセット
+        this.score = { totalQuestions: 0, consecutiveCorrect: 0, correctAnswers: 0, maxConsecutive: 0 };
+        this.timeLeft = 60;
+        this.hasPlayedRankinGako = false; // ランクイン音再生フラグをリセット
+        
+        // デバッグ表示をリセット
+        this.updateDebugDisplay(null);
+        
+        // スタートボタンを無効化、中断ボタンとスコア表示を表示
+        this.startButton.disabled = true;
+        this.startButton.style.display = 'none';
+        this.stopButton.style.display = 'inline-block';
+        this.scoreDisplay.style.display = 'block';
+        this.updateScoreDisplay();
+        
+        
+        // カウントダウンタイマー開始
+        this.startCountdown();
+        
+        // 最初の問題を開始
+        this.startNextQuestion();
+    }
+    
+    /**
+     * カウントダウンタイマー開始
+     */
+    startCountdown() {
+        this.gameTimer = setInterval(() => {
+            this.timeLeft--;
+            
+            // スコア表示を更新
+            this.updateScoreDisplay();
+            
+            // 残り10秒以下でハート音のリピート再生を開始
+            if (this.timeLeft <= 10 && this.timeLeft > 0) {
+                // ハート音のリピート再生を開始
+                this.audio.startHeartMovingSound();
+            } else {
+                // ハート音のリピート再生を停止
+                this.audio.stopHeartMovingSound();
+            }
+            
+            if (this.timeLeft <= 0) {
+                this.endGame();
+            }
+        }, 1000);
+    }
+    
+    
+    /**
+     * ゲーム中断
+     */
+    stopGame() {
+        if (!this.gameStarted) return;
+        
+        // 確認ダイアログ
+        if (!confirm('ゲームを中断しますか？\n現在のスコアで終了します。')) {
+            // キャンセルが選択された場合、何もしない（ゲームを継続）
+            console.log('ゲーム中断がキャンセルされました');
+            return;
+        }
+        
+        // ゲーム中断処理を実行（結果表示なし）
+        this.endGameInterrupted();
+    }
+    
+    /**
+     * ゲーム中断処理（結果表示なし）
+     */
+    endGameInterrupted() {
+        clearInterval(this.gameTimer);
+        this.gameStarted = false;
+        
+        // 全てのアニメーションを停止
+        this.reels.forEach((reel, index) => {
+            clearInterval(this.spinIntervals[index]);
+        });
+        
+        
+        // ハート音のリピート再生を停止
+        this.audio.stopHeartMovingSound();
+        
+        // 結果ポップアップは表示しない（中断のため）
+        
+        // スタートボタンを復活、中断ボタンとスコア表示を非表示
+        this.startButton.disabled = false;
+        this.startButton.style.display = 'inline-block';
+        this.startButton.textContent = 'スタート';
+        this.stopButton.style.display = 'none';
+        this.scoreDisplay.style.display = 'none';
+        
+        // 選択肢を非表示
+        this.answerChoices.style.visibility = 'hidden';
+        this.answerChoices.innerHTML = '';
+        
+        
+        console.log('ゲームが中断されました（結果表示なし）');
+    }
+    
+    /**
+     * ゲーム終了
+     */
+    endGame() {
+        clearInterval(this.gameTimer);
+        this.gameStarted = false;
+        
+        // 全てのアニメーションを停止
+        this.reels.forEach((reel, index) => {
+            clearInterval(this.spinIntervals[index]);
+        });
+        
+        
+        // ハート音のリピート再生を停止
+        this.audio.stopHeartMovingSound();
+        
+        // 結果ポップアップを表示
+        this.showResultPopup();
+        
+        // スタートボタンを復活、中断ボタンとスコア表示を非表示
+        this.startButton.disabled = false;
+        this.startButton.style.display = 'inline-block';
+        this.startButton.textContent = '再スタート';
+        this.stopButton.style.display = 'none';
+        this.scoreDisplay.style.display = 'none';
+        
+        
+    }
+    
+    /**
+     * アニメーションをクリア
+     */
+    clearAnimations() {
+        // 全てのリールのアニメーションを停止
+        this.reels.forEach((reel, index) => {
+            if (this.spinIntervals[index]) {
+                clearInterval(this.spinIntervals[index]);
+                this.spinIntervals[index] = null;
+            }
+            this.isSpinning[index] = false;
+        });
+    }
+    
+    /**
+     * 次の問題を開始
+     */
+    async startNextQuestion() {
+        if (this.timeLeft <= 0) return;
+        
+        // 前回のアニメーションをクリア
+        this.clearAnimations();
+        
+        // 強調表示をリセット
+        this.resetHighlights();
+        
+        // 問題を選択
+        this.currentQuestionData = this.logic.selectRandomQuestion();
+        
+        // デバッグ表示を更新
+        this.updateDebugDisplay(this.currentQuestionData);
+
+        // UI状態の更新
+        this.answerChoices.style.visibility = 'hidden';
+        this.currentQuestions = [null, null, null]; // 問題文状態リセット
+        
+        // スタート音（slot_start.wav）
+        this.audio.playStartSound();
+        
+        // 全てのリールを回転開始
+        this.reels.forEach((reel, index) => {
+            this.isSpinning[index] = true;
+            this.spinReel(index);
+        });
+        
+        // 左から順番に停止（1秒、2秒、3秒）
+        setTimeout(() => {
+            this.stopReel(0); // 左のリール（1秒後）
+        }, 1000);
+        
+        setTimeout(() => {
+            this.stopReel(1); // 中央のリール（2秒後）
+        }, 2000);
+        
+        setTimeout(() => {
+            this.stopReel(2); // 右のリール（3秒後）
+        }, 3000);
+    }
+    
+    /**
+     * 強調表示をリセット
+     */
+    resetHighlights() {
+        this.reels.forEach((reel) => {
+            const symbols = reel.querySelectorAll('.slot-symbol');
+            symbols.forEach(symbol => {
+                symbol.style.color = '#ffd700';
+                symbol.style.fontSize = '16px';
+                symbol.style.fontWeight = 'bold';
+                symbol.style.borderTop = '';
+                symbol.style.borderBottom = '';
+                symbol.style.webkitTextStroke = '';
+                symbol.style.textShadow = '1px 1px 2px rgba(0, 0, 0, 0.8)';
+                symbol.style.background = '';
+            });
+        });
+    }
+    
+    /**
+     * リールの回転アニメーション（滑らかな高速回転）
+     * @param {number} reelIndex - リールのインデックス
+     */
+    spinReel(reelIndex) {
+        const reel = this.reels[reelIndex];
+        let position = 0;
+        const interval = this.logic.getSpinInterval();
+        const fullCycle = this.logic.getFullCycleLength();
+        
+        this.spinIntervals[reelIndex] = setInterval(() => {
+            if (this.isSpinning[reelIndex]) {
+                // より滑らかな高速回転
+                position -= this.logic.symbolHeight * 2; // 2倍速で回転
+                // 無限リピート：1周したら位置をリセットして継続
+                if (position <= -fullCycle) {
+                    position += fullCycle; // 位置をリセット（0に戻すのではなく、1周分を引く）
+                }
+                reel.style.transform = `translateY(${position}px)`;
+            }
+        }, interval);
+    }
+    
+    
+    /**
+     * リールの停止
+     * @param {number} reelIndex - リールのインデックス
+     */
+    stopReel(reelIndex) {
+        if (!this.isSpinning[reelIndex]) return;
+        
+        
+        // 回転状態の更新
+        this.isSpinning[reelIndex] = false;
+        
+        // ゆっくりと停止
+        this.slowDownReel(reelIndex);
+    }
+    
+    /**
+     * リールの減速停止アニメーション
+     * @param {number} reelIndex - リールのインデックス
+     */
+    slowDownReel(reelIndex) {
+        const reel = this.reels[reelIndex];
+        let currentPosition = this.getCurrentPosition(reel);
+        let previousPosition = currentPosition;
+        let velocity = 0;
+        let soundPlayed = false; // 停止音再生フラグ
+        
+        // ロジック層から最終位置を取得
+        const reelTypes = ['left', 'center', 'right'];
+        const reelType = reelTypes[reelIndex];
+        
+        // 現在の問題データから適切な問題文を選択
+        let targetQuestion = null;
+        if (reelIndex === 0) targetQuestion = this.currentQuestionData.left.question;
+        else if (reelIndex === 1) targetQuestion = this.currentQuestionData.center.question;
+        else if (reelIndex === 2) targetQuestion = this.currentQuestionData.right.question;
+        
+        console.log(`リール${reelIndex + 1}の目標問題文: ${targetQuestion}`);
+        const finalPosition = this.logic.getPositionForQuestion(targetQuestion, reelType);
+        this.finalPositions[reelIndex] = finalPosition;
+        console.log(`リール${reelIndex + 1}の最終位置: ${finalPosition}px (symbolHeight: ${this.logic.symbolHeight}px, visibleRows: ${this.logic.visibleRows})`);
+        
+        // 滑らかな停止アニメーション
+        const stopAnimation = () => {
+            const distance = finalPosition - currentPosition;
+            
+            // 純粋に速度ベースの減速（距離に依存しない）
+            const easingFactor = 0.08; // 固定の減速係数
+            const newPosition = currentPosition + distance * easingFactor;
+            
+            // 回転速度を計算（より精密に）
+            velocity = Math.abs(newPosition - previousPosition);
+            previousPosition = currentPosition;
+            currentPosition = newPosition;
+            
+            // 位置をピクセル単位で正確に設定（小数点以下を適切に処理）
+            const roundedPosition = Math.round(currentPosition * 100) / 100;
+            reel.style.transform = `translateY(${roundedPosition}px)`;
+            
+            // 回転速度が一定以下になったら強制停止（速度のみをトリガーに）
+            // より厳格な停止条件で、ピッタリ真ん中に停止
+            if (velocity <= 0.1 || Math.abs(distance) < 0.5) {
+                // 最終位置に正確に固定（ピッタリに）
+                reel.style.transform = `translateY(${finalPosition}px)`;
+                
+                // 停止位置から問題文を計算して記録
+                const stoppedQuestion = this.logic.getQuestionFromPosition(finalPosition, reelType);
+                this.currentQuestions[reelIndex] = stoppedQuestion;
+                
+                console.log(`リール${reelIndex + 1}停止完了: 位置=${finalPosition}px（ピッタリ）, 問題文="${stoppedQuestion}"`);
+                
+                // 停止音を再生
+                if (!soundPlayed) {
+                    this.audio.playStopSound();
+                    soundPlayed = true;
+                }
+                
+                // このリールだけを強調表示
+                this.highlightSingleReel(reelIndex, targetQuestion);
+                
+                this.checkGameComplete();
+            } else {
+                requestAnimationFrame(stopAnimation);
+            }
+        };
+        
+        // インターバルをクリア
+        clearInterval(this.spinIntervals[reelIndex]);
+        
+        // 停止アニメーション開始
+        requestAnimationFrame(stopAnimation);
+    }
+    
+    /**
+     * 現在のリール位置を取得
+     * @param {HTMLElement} reel - リール要素
+     * @returns {number} 現在の位置
+     */
+    getCurrentPosition(reel) {
+        const transform = reel.style.transform;
+        const val = parseFloat(transform.replace('translateY(', '').replace('px)', ''));
+        // 位置の精度を向上（小数点以下2桁で丸める）
+        return isNaN(val) ? 0 : Math.round(val * 100) / 100;
+    }
+
+    /**
+     * DOMの実寸に基づきロジック層の幾何情報を同期
+     */
+    syncGeometry() {
+        try {
+            // 全てのリールからsymbolHeightを取得して平均を計算（より正確に）
+            let totalHeight = 0;
+            let count = 0;
+            
+            for (let i = 0; i < this.reels.length; i++) {
+                const reel = this.reels[i];
+                if (!reel) continue;
+                const symbol = reel.querySelector('.slot-symbol');
+                if (!symbol) continue;
+                const height = symbol.getBoundingClientRect().height;
+                if (height > 0) {
+                    totalHeight += height;
+                    count++;
+                }
+            }
+            
+            // 平均symbolHeightを計算
+            if (count > 0) {
+                const avgSymbolHeight = totalHeight / count;
+                this.logic.symbolHeight = avgSymbolHeight;
+                console.log(`symbolHeight更新: ${avgSymbolHeight}px (${count}リールから計算)`);
+            }
+            
+            // visibleRowsを計算（最初のリールのカラム要素から）
+            const firstReel = this.reels[0];
+            if (firstReel) {
+                const columnEl = firstReel.parentElement;
+                if (columnEl) {
+                    const columnHeight = columnEl.getBoundingClientRect().height;
+                    const visibleRows = Math.max(1, Math.round(columnHeight / this.logic.symbolHeight));
+                    this.logic.visibleRows = visibleRows;
+                    console.log(`visibleRows更新: ${visibleRows} (columnHeight: ${columnHeight}px)`);
+                }
+            }
+        } catch (e) {
+            console.warn('幾何情報同期に失敗:', e);
+        }
+    }
+    
+    /**
+     * ゲーム完了チェック
+     */
+    checkGameComplete() {
+        const allStopped = this.isSpinning.every(spinning => !spinning);
+        
+        if (allStopped) {
+            // 問題を確定してから選択肢を表示
+            this.finalizeQuestion();
+        }
+    }
+    
+    /**
+     * 問題を確定して選択肢を表示
+     */
+    finalizeQuestion() {
+        // 問題を確定（現在の問題データを確定）
+        const fullQuestion = this.logic.generateFullQuestion(this.currentQuestions);
+        console.log('確定した問題:', fullQuestion);
+        
+        // 全てのリールはすでに個別に強調表示されているので、ここでは何もしない
+        
+        // 問題が確定したら即座に選択肢を表示
+        this.displayAnswerChoices();
+    }
+    
+    /**
+     * 単一のリールを強調表示
+     * @param {number} reelIndex - リールのインデックス
+     * @param {string} targetQuestion - 目標問題文
+     */
+    highlightSingleReel(reelIndex, targetQuestion) {
+        const reel = this.reels[reelIndex];
+        const symbols = reel.querySelectorAll('.slot-symbol');
+        
+        symbols.forEach(symbol => {
+            // 目標の問題文に一致する場合、強調表示
+            if (symbol.textContent === targetQuestion) {
+                symbol.style.color = '#ff0000'; // 赤色
+                symbol.style.fontSize = '20px'; // 大きい文字
+                symbol.style.fontWeight = 'bold'; // bold
+                symbol.style.webkitTextStroke = '0.8px #ffd700'; // 文字の縁を金色（細く）
+                symbol.style.textShadow = '2px 2px 4px rgba(0, 0, 0, 0.9), 0 0 10px rgba(255, 215, 0, 0.6)'; // 影を強調
+                symbol.style.borderTop = '3px solid #ffd700'; // 上の区切りを金色
+                symbol.style.borderBottom = '3px solid #ffd700'; // 下の区切りを金色
+                symbol.style.background = 'rgba(255, 215, 0, 0.1)'; // 背景を少し明るく
+                console.log(`リール${reelIndex + 1}: 問題文 "${targetQuestion}" を強調表示しました`);
+            }
+        });
+    }
+    
+    /**
+     * 停止した問題文を強調表示（全リール対象・旧バージョン）
+     */
+    highlightSelectedQuestions() {
+        // 各リールで、目標の問題文を強調表示
+        const targetQuestions = [
+            this.currentQuestionData.left.question,
+            this.currentQuestionData.center.question,
+            this.currentQuestionData.right.question
+        ];
+        
+        this.reels.forEach((reel, reelIndex) => {
+            const symbols = reel.querySelectorAll('.slot-symbol');
+            const targetQuestion = targetQuestions[reelIndex];
+            
+            symbols.forEach(symbol => {
+                // 既存の強調スタイルをリセット
+                symbol.style.color = '#ffd700';
+                symbol.style.fontSize = '16px';
+                symbol.style.fontWeight = 'bold';
+                symbol.style.borderTop = '';
+                symbol.style.borderBottom = '';
+                symbol.style.webkitTextStroke = '';
+                symbol.style.textShadow = '1px 1px 2px rgba(0, 0, 0, 0.8)';
+                symbol.style.background = '';
+                
+                // 目標の問題文に一致する場合、強調表示
+                if (symbol.textContent === targetQuestion) {
+                    symbol.style.color = '#ff0000'; // 赤色
+                    symbol.style.fontSize = '20px'; // 大きい文字
+                    symbol.style.fontWeight = 'bold'; // bold
+                    symbol.style.webkitTextStroke = '0.8px #ffd700'; // 文字の縁を金色（細く）
+                    symbol.style.textShadow = '2px 2px 4px rgba(0, 0, 0, 0.9), 0 0 10px rgba(255, 215, 0, 0.6)'; // 影を強調
+                    symbol.style.borderTop = '3px solid #ffd700'; // 上の区切りを金色
+                    symbol.style.borderBottom = '3px solid #ffd700'; // 下の区切りを金色
+                    symbol.style.background = 'rgba(255, 215, 0, 0.1)'; // 背景を少し明るく
+                    console.log(`リール${reelIndex + 1}: 問題文 "${targetQuestion}" を強調表示しました`);
+                }
+            });
+        });
+    }
+    
+    
+    
+    /**
+     * 解答選択肢の表示
+     */
+    displayAnswerChoices() {
+        // 現在の問題データが確定しているかチェック
+        if (!this.currentQuestionData) {
+            console.error('問題データが確定していません');
+            return;
+        }
+        
+        // 表示中の更新を防ぐため、既に表示されている場合は何もしない
+        if (this.answerChoices.style.visibility === 'visible') {
+            console.log('選択肢は既に表示中です。更新をスキップします。');
+            return;
+        }
+        
+        const choices = this.logic.generateAnswerChoices();
+        
+        // 非表示中にテキスト更新を実行
+        this.answerChoices.innerHTML = '';
+        
+        // 選択肢ボタンを生成（非表示中に実行）
+        choices.forEach((choice, index) => {
+            const button = document.createElement('button');
+            button.className = 'answer-choice';
+            button.textContent = choice;
+            button.addEventListener('click', () => {
+                this.audio.playButtonPushedSound();
+                this.selectAnswer(choice);
+            });
+            this.answerChoices.appendChild(button);
+        });
+        
+        // 問題が確定したら即座に選択肢を表示
+        this.answerChoices.style.visibility = 'visible';
+        
+        console.log('選択肢を表示:', choices);
+    }
+    
+    /**
+     * 解答の選択
+     * @param {string} selectedAnswer - 選択された解答
+     */
+    selectAnswer(selectedAnswer) {
+        // 選択肢を即座に非表示（押されたらすぐに非表示）
+        this.answerChoices.style.visibility = 'hidden';
+        
+        const result = this.logic.judgeAnswer(selectedAnswer);
+        
+        // スコア更新
+        this.score.totalQuestions++;
+        if (result.isCorrect) {
+            this.score.correctAnswers++;
+            this.score.consecutiveCorrect++;
+            // 最高連続正解数を更新
+            if (this.score.consecutiveCorrect > this.score.maxConsecutive) {
+                this.score.maxConsecutive = this.score.consecutiveCorrect;
+            }
+        } else {
+            this.score.consecutiveCorrect = 0; // 連続正解数をリセット
+        }
+        
+        // スコア表示を即座に更新
+        this.updateScoreDisplay();
+        
+        // ランク圏内チェック（プレイ中）
+        this.checkRankingDuringGame();
+        
+        // 結果表示は削除済み
+        
+        // 選択肢の色を変更（非表示中に実行）
+        const choiceButtons = this.answerChoices.querySelectorAll('.answer-choice');
+        choiceButtons.forEach(button => {
+            if (button.textContent === result.correctAnswer) {
+                button.classList.add('correct');
+            } else if (button.textContent === selectedAnswer && !result.isCorrect) {
+                button.classList.add('incorrect');
+            }
+            button.disabled = true;
+        });
+        
+        // 音響効果（簡略化）
+        // 正解時の効果音は削除
+        
+        // 0.5秒後に自動で次の問題に移行（短縮）
+        setTimeout(() => {
+            this.answerChoices.innerHTML = '';
+            if (this.timeLeft > 0) {
+                this.startNextQuestion();
+            }
+        }, 500);
+    }
+    
+    /**
+     * プレイ中のランク圏内チェック
+     */
+    checkRankingDuringGame() {
+        // 既にランクイン音を再生済みの場合は何もしない
+        if (this.hasPlayedRankinGako) {
+            return;
+        }
+        
+        // ランキングが埋まっているかチェック
+        if (!this.isRankingFull()) {
+            return;
+        }
+        
+        // 正解数ランキングの上位5位以内に入るかチェック
+        const isCorrectTop5 = this.ranking.isCorrectAnswersTop5(this.score.correctAnswers);
+        // 連続正解数ランキングの上位5位以内に入るかチェック
+        const isConsecutiveTop5 = this.ranking.isConsecutiveAnswersTop5(this.score.maxConsecutive);
+        
+        if (isCorrectTop5 || isConsecutiveTop5) {
+            // ランク圏内入り音を再生（1回のみ）
+            this.audio.playRankinGakoSound();
+            this.hasPlayedRankinGako = true; // フラグを立てて重複再生を防止
+            console.log('ランク圏内入り！rankin_gako.mp3を再生しました（1回のみ）');
+        }
+    }
+    
+    /**
+     * ランキングが埋まっているかチェック
+     * @returns {boolean} ランキングが埋まっているかどうか
+     */
+    isRankingFull() {
+        const correctAnswersCount = this.ranking.getCorrectAnswersRanking().length;
+        const consecutiveAnswersCount = this.ranking.getConsecutiveAnswersRanking().length;
+        const maxEntries = this.ranking.maxRankingEntries;
+        
+        // どちらかのランキングが最大エントリー数に達している場合のみtrue
+        return correctAnswersCount >= maxEntries || consecutiveAnswersCount >= maxEntries;
+    }
+    
+    /**
+     * ランキングにデータがあるかチェック
+     * @returns {boolean} ランキングにデータがあるかどうか
+     */
+    hasRankingData() {
+        const correctAnswersCount = this.ranking.getCorrectAnswersRanking().length;
+        const consecutiveAnswersCount = this.ranking.getConsecutiveAnswersRanking().length;
+        
+        // どちらかのランキングにデータがある場合のみtrue
+        return correctAnswersCount > 0 || consecutiveAnswersCount > 0;
+    }
+    
+    /**
+     * スコア表示を更新
+     */
+    updateScoreDisplay() {
+        if (this.gameStarted && this.scoreDisplay) {
+            // 残り時間の色とアニメーションを決定（10秒以下で点滅表示）
+            const isUrgent = this.timeLeft <= 10;
+            const timeColor = isUrgent ? '#dc3545' : '';
+            const timeClass = isUrgent ? 'urgent-time blinking' : '';
+            const timeSize = isUrgent ? '28px' : '24px';
+            
+            // スコア表示エリアに詳細情報を表示
+            this.scoreDisplay.innerHTML = `
+                <div style="line-height: 1.4;">
+                    <div class="${timeClass}" style="font-size: ${timeSize}; font-weight: bold; margin-bottom: 8px; text-align: center; color: ${timeColor};">
+                        残り ${this.timeLeft}秒
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 16px; margin-bottom: 3px;">
+                        <span>正解:</span>
+                        <span>${this.score.correctAnswers}問</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 16px;">
+                        <span>連続:</span>
+                        <span>${this.score.consecutiveCorrect}問</span>
+                    </div>
+                </div>
+            `;
+        } else if (this.startButton) {
+            // ゲーム開始前は初期表示
+            this.startButton.textContent = 'スタート';
+        }
+    }
+    
+    
+    /**
+     * 結果ポップアップが表示されているかチェック
+     * @returns {boolean} 結果ポップアップが表示されているか
+     */
+    isResultPopupVisible() {
+        const popup = document.getElementById('resultPopup');
+        return popup && popup.style.display === 'flex';
+    }
+    
+    /**
+     * 結果ポップアップを表示
+     */
+    showResultPopup() {
+        const popup = document.getElementById('resultPopup');
+        const popupContent = document.getElementById('resultPopupContent');
+        const totalQuestions = document.getElementById('popupTotalQuestions');
+        const correctAnswers = document.getElementById('popupCorrectAnswers');
+        const accuracy = document.getElementById('popupAccuracy');
+        const maxConsecutive = document.getElementById('popupMaxConsecutive');
+        const rankingButtons = document.getElementById('rankingButtons');
+        
+        // 正答率を計算
+        const accuracyRate = this.score.totalQuestions > 0 
+            ? Math.round((this.score.correctAnswers / this.score.totalQuestions) * 100)
+            : 0;
+        
+        // データを設定
+        totalQuestions.textContent = this.score.totalQuestions;
+        correctAnswers.textContent = this.score.correctAnswers;
+        accuracy.textContent = `${accuracyRate}%`;
+        maxConsecutive.textContent = this.score.maxConsecutive;
+        
+        // ランキング記録ボタンの表示制御
+        this.updateRankingButtons(accuracyRate);
+        
+        // ランキング入りエフェクトの制御
+        this.checkRankingEffect(accuracyRate);
+        
+        // ポップアップを表示
+        popup.style.display = 'flex';
+    }
+    
+    /**
+     * ランキング入りエフェクトの制御（豪華版）
+     * @param {number} accuracyRate - 正答率
+     */
+    checkRankingEffect(accuracyRate) {
+        const popupContent = document.getElementById('resultPopupContent');
+        const sparkles = document.getElementById('rankingSparkles');
+        const rankingMessage = document.getElementById('rankingMessage');
+        
+        // 正解数ランキングの上位5位以内に入るかチェック
+        const isCorrectTop5 = this.ranking.isCorrectAnswersTop5(this.score.correctAnswers);
+        // 連続正解数ランキングの上位5位以内に入るかチェック
+        const isConsecutiveTop5 = this.ranking.isConsecutiveAnswersTop5(this.score.maxConsecutive);
+        
+        // 一位かどうかを判定
+        const isCorrectFirst = isCorrectTop5 && this.ranking.isCorrectAnswersFirst(this.score.correctAnswers);
+        const isConsecutiveFirst = isConsecutiveTop5 && this.ranking.isConsecutiveAnswersFirst(this.score.maxConsecutive);
+        const isFirst = isCorrectFirst || isConsecutiveFirst;
+        
+        // ランキングが空でないかチェック
+        const hasRankingData = this.hasRankingData();
+        
+        // ランキングが埋まっているか、または（一位かつランキングにデータがある）場合は演出を実行
+        const shouldShowEffect = this.isRankingFull() || (isFirst && hasRankingData);
+        
+        if ((isCorrectTop5 || isConsecutiveTop5) && shouldShowEffect) {
+            // ランキング入り動画を表示
+            this.showRankingVideo();
+            
+            if (isFirst) {
+                // 一位ランキング入りオーバーレイ動画を表示（1回のみ）
+                this.showTopRankingOverlayVideo();
+            } else {
+                // 通常のランキング入りオーバーレイ動画を表示（1回のみ）
+                this.showRankingOverlayVideo();
+            }
+            
+            // ランキング入り特別メッセージを表示
+            this.showRankingMessage(isCorrectTop5, isConsecutiveTop5);
+            
+            // ランキング入りエフェクトを適用
+            popupContent.classList.add('ranking-effect');
+            sparkles.style.display = 'block';
+            
+            // パーティクルエフェクトを追加
+            this.createParticleEffect(popupContent);
+            
+            // 画面全体に振動エフェクトを追加
+            this.addScreenShake();
+            
+            // 10秒後にエフェクトを停止（動画をより長く表示）
+            setTimeout(() => {
+                popupContent.classList.remove('ranking-effect');
+                sparkles.style.display = 'none';
+                rankingMessage.style.display = 'none';
+                // 動画も非表示にする
+                this.hideRankingVideo();
+            }, 10000);
+            
+            // ランキング入り音を再生（複数回）
+            this.playRankingFanfare();
+        }
+    }
+    
+    /**
+     * ランキング入り特別メッセージを表示
+     * @param {boolean} isCorrectTop5 - 正解数ランキング入り
+     * @param {boolean} isConsecutiveTop5 - 連続正解数ランキング入り
+     */
+    showRankingMessage(isCorrectTop5, isConsecutiveTop5) {
+        const rankingMessage = document.getElementById('rankingMessage');
+        
+        let message = '🎉 ランキング入り！ 🎉';
+        if (isCorrectTop5 && isConsecutiveTop5) {
+            message = '🏆 ダブルランキング入り！ 🏆';
+        } else if (isCorrectTop5) {
+            message = '⭐ 正解数ランキング入り！ ⭐';
+        } else if (isConsecutiveTop5) {
+            message = '🔥 連続正解数ランキング入り！ 🔥';
+        }
+        
+        rankingMessage.textContent = message;
+        rankingMessage.style.display = 'block';
+        
+        // メッセージのアニメーション
+        setTimeout(() => {
+            rankingMessage.style.opacity = '0';
+            rankingMessage.style.transform = 'translateX(-50%) translateY(-20px) scale(0.8)';
+        }, 4500);
+    }
+    
+    /**
+     * パーティクルエフェクトを作成
+     * @param {HTMLElement} container - エフェクトのコンテナ
+     */
+    createParticleEffect(container) {
+        const particleCount = 20;
+        
+        for (let i = 0; i < particleCount; i++) {
+            setTimeout(() => {
+                const particle = document.createElement('div');
+                particle.style.position = 'absolute';
+                particle.style.width = '6px';
+                particle.style.height = '6px';
+                particle.style.background = `hsl(${Math.random() * 360}, 100%, 50%)`;
+                particle.style.borderRadius = '50%';
+                particle.style.pointerEvents = 'none';
+                particle.style.zIndex = '1002';
+                
+                // ランダムな位置から開始
+                const startX = Math.random() * container.offsetWidth;
+                const startY = Math.random() * container.offsetHeight;
+                particle.style.left = startX + 'px';
+                particle.style.top = startY + 'px';
+                
+                container.appendChild(particle);
+                
+                // アニメーション
+                const animation = particle.animate([
+                    { 
+                        transform: 'translate(0, 0) scale(1)',
+                        opacity: 1
+                    },
+                    { 
+                        transform: `translate(${(Math.random() - 0.5) * 200}px, ${(Math.random() - 0.5) * 200}px) scale(0)`,
+                        opacity: 0
+                    }
+                ], {
+                    duration: 2000 + Math.random() * 1000,
+                    easing: 'ease-out'
+                });
+                
+                animation.onfinish = () => {
+                    particle.remove();
+                };
+            }, i * 100);
+        }
+    }
+    
+    /**
+     * 画面振動エフェクトを追加
+     */
+    addScreenShake() {
+        const body = document.body;
+        body.style.animation = 'screen-shake 0.5s ease-in-out';
+        
+        // CSS アニメーションを動的に追加
+        if (!document.getElementById('screen-shake-style')) {
+            const style = document.createElement('style');
+            style.id = 'screen-shake-style';
+            style.textContent = `
+                @keyframes screen-shake {
+                    0%, 100% { transform: translateX(0); }
+                    10% { transform: translateX(-2px); }
+                    20% { transform: translateX(2px); }
+                    30% { transform: translateX(-1px); }
+                    40% { transform: translateX(1px); }
+                    50% { transform: translateX(-0.5px); }
+                    60% { transform: translateX(0.5px); }
+                    70% { transform: translateX(-0.25px); }
+                    80% { transform: translateX(0.25px); }
+                    90% { transform: translateX(-0.1px); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+        setTimeout(() => {
+            body.style.animation = '';
+        }, 500);
+    }
+    
+    /**
+     * ランキング入り動画を表示
+     */
+    showRankingVideo() {
+        const videoBackground = document.getElementById('rankingVideoBackground');
+        const video = document.getElementById('rankingVideo');
+        
+        if (videoBackground && video) {
+            // 動画の設定を確実にする
+            video.loop = true; // ループを確実に設定
+            video.muted = false; // 音声を有効にする
+            video.autoplay = true; // 自動再生を有効にする
+            
+            // 動画を表示
+            videoBackground.style.display = 'block';
+            
+            // 動画を最初から再生開始
+            video.currentTime = 0;
+            
+            // 動画の再生を開始
+            const playPromise = video.play();
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    console.log('ランキング入り動画の再生を開始しました（ループ再生）');
+                }).catch(error => {
+                    console.warn('動画の自動再生に失敗しました:', error);
+                    // 自動再生が失敗した場合、ユーザーインタラクション後に再生を試行
+                    console.log('ユーザーインタラクション後に再生を再試行します');
+                });
+            }
+            
+            console.log('ランキング入り動画を表示しました（ループ再生、音声有効）');
+        }
+    }
+    
+    /**
+     * ランキング入り動画を非表示
+     */
+    hideRankingVideo() {
+        const videoBackground = document.getElementById('rankingVideoBackground');
+        const video = document.getElementById('rankingVideo');
+        
+        if (videoBackground && video) {
+            // 動画を停止
+            video.pause();
+            
+            // イベントリスナーを削除（メモリリーク防止）
+            video.removeEventListener('ended', this.handleVideoEnd);
+            
+            // 動画を非表示
+            videoBackground.style.display = 'none';
+            
+            console.log('ランキング入り動画を非表示にしました');
+        }
+    }
+    
+    /**
+     * ランキング入りオーバーレイ動画を表示（1回のみ再生）
+     */
+    showRankingOverlayVideo() {
+        const overlayContainer = document.getElementById('rankingOverlayVideo');
+        const overlayVideo = document.getElementById('rankingOverlayVideoElement');
+        
+        if (overlayContainer && overlayVideo) {
+            // 動画の設定
+            overlayVideo.loop = false; // ループしない（1回のみ）
+            overlayVideo.muted = false; // 音声を有効にする
+            
+            // オーバーレイ動画を表示
+            overlayContainer.style.display = 'block';
+            
+            // 動画を最初から再生開始
+            overlayVideo.currentTime = 0;
+            
+            // 動画の終了時に非表示にするイベントリスナーを追加
+            this.handleOverlayVideoEnd = () => {
+                console.log('オーバーレイ動画が終了しました。非表示にします。');
+                overlayContainer.style.display = 'none';
+            };
+            overlayVideo.addEventListener('ended', this.handleOverlayVideoEnd);
+            
+            // 動画の再生を開始
+            const playPromise = overlayVideo.play();
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    console.log('ランキング入りオーバーレイ動画の再生を開始しました');
+                }).catch(error => {
+                    console.warn('オーバーレイ動画の自動再生に失敗しました:', error);
+                    // 自動再生が失敗した場合、ユーザーインタラクション後に再生を試行
+                    console.log('ユーザーインタラクション後にオーバーレイ動画の再生を再試行します');
+                });
+            }
+            
+            console.log('ランキング入りオーバーレイ動画を表示しました（1回のみ再生）');
+        }
+    }
+    
+    /**
+     * ランキング入りオーバーレイ動画を非表示
+     */
+    hideRankingOverlayVideo() {
+        const overlayContainer = document.getElementById('rankingOverlayVideo');
+        const overlayVideo = document.getElementById('rankingOverlayVideoElement');
+        
+        if (overlayContainer && overlayVideo) {
+            // 動画を停止
+            overlayVideo.pause();
+            
+            // イベントリスナーを削除（メモリリーク防止）
+            overlayVideo.removeEventListener('ended', this.handleOverlayVideoEnd);
+            
+            // 動画を非表示
+            overlayContainer.style.display = 'none';
+            
+            console.log('ランキング入りオーバーレイ動画を非表示にしました');
+        }
+    }
+    
+    /**
+     * 一位ランキング入りオーバーレイ動画を表示（1回のみ再生）
+     */
+    showTopRankingOverlayVideo() {
+        const overlayContainer = document.getElementById('topRankingOverlayVideo');
+        const overlayVideo = document.getElementById('topRankingOverlayVideoElement');
+        
+        if (overlayContainer && overlayVideo) {
+            // 動画の設定
+            overlayVideo.loop = false; // ループしない（1回のみ）
+            overlayVideo.muted = false; // 音声を有効にする
+            
+            // オーバーレイ動画を表示
+            overlayContainer.style.display = 'block';
+            
+            // 動画を最初から再生開始
+            overlayVideo.currentTime = 0;
+            
+            // 動画の終了時に非表示にするイベントリスナーを追加
+            this.handleTopOverlayVideoEnd = () => {
+                console.log('一位オーバーレイ動画が終了しました。非表示にします。');
+                overlayContainer.style.display = 'none';
+            };
+            overlayVideo.addEventListener('ended', this.handleTopOverlayVideoEnd);
+            
+            // 動画の再生を開始
+            const playPromise = overlayVideo.play();
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    console.log('一位ランキング入りオーバーレイ動画の再生を開始しました');
+                }).catch(error => {
+                    console.warn('一位オーバーレイ動画の自動再生に失敗しました:', error);
+                    // 自動再生が失敗した場合、ユーザーインタラクション後に再生を試行
+                    console.log('ユーザーインタラクション後に一位オーバーレイ動画の再生を再試行します');
+                });
+            }
+            
+            console.log('一位ランキング入りオーバーレイ動画を表示しました（1回のみ再生）');
+        }
+    }
+    
+    /**
+     * 一位ランキング入りオーバーレイ動画を非表示
+     */
+    hideTopRankingOverlayVideo() {
+        const overlayContainer = document.getElementById('topRankingOverlayVideo');
+        const overlayVideo = document.getElementById('topRankingOverlayVideoElement');
+        
+        if (overlayContainer && overlayVideo) {
+            // 動画を停止
+            overlayVideo.pause();
+            
+            // イベントリスナーを削除（メモリリーク防止）
+            overlayVideo.removeEventListener('ended', this.handleTopOverlayVideoEnd);
+            
+            // 動画を非表示
+            overlayContainer.style.display = 'none';
+            
+            console.log('一位ランキング入りオーバーレイ動画を非表示にしました');
+        }
+    }
+    
+    /**
+     * ランキング入りファンファーレを再生
+     */
+    playRankingFanfare() {
+        // ランキング入り音（rankin.wav）
+        this.audio.playRankinSound();
+        
+    }
+    
+    /**
+     * ランキング記録ボタンの表示制御
+     * @param {number} accuracyRate - 正答率
+     */
+    updateRankingButtons(accuracyRate) {
+        const rankingButtons = document.getElementById('rankingButtons');
+        const recordRankingBtn = document.getElementById('recordRankingBtn');
+        
+        // 正解数ランキングの上位5位以内に入るかチェック
+        const isCorrectTop5 = this.ranking.isCorrectAnswersTop5(this.score.correctAnswers);
+        // 連続正解数ランキングの上位5位以内に入るかチェック
+        const isConsecutiveTop5 = this.ranking.isConsecutiveAnswersTop5(this.score.maxConsecutive);
+        
+        // ランキングボタンエリアの表示制御
+        rankingButtons.style.display = (isCorrectTop5 || isConsecutiveTop5) ? 'block' : 'none';
+        
+        // イベントリスナーを設定
+        recordRankingBtn.onclick = () => {
+            this.audio.playButtonPushedSound();
+            this.recordRanking(accuracyRate);
+        };
+    }
+    
+    /**
+     * ランキングに記録（統合版）
+     * @param {number} accuracyRate - 正答率
+     */
+    async recordRanking(accuracyRate) {
+        const playerName = prompt('プレイヤー名を入力してください:');
+        if (!playerName || !playerName.trim()) {
+            return;
+        }
+        
+        const trimmedName = playerName.trim();
+        const results = [];
+        
+        try {
+            // 正解数ランキングの上位5位以内に入るかチェック
+            const isCorrectTop5 = this.ranking.isCorrectAnswersTop5(this.score.correctAnswers);
+            // 連続正解数ランキングの上位5位以内に入るかチェック
+            const isConsecutiveTop5 = this.ranking.isConsecutiveAnswersTop5(this.score.maxConsecutive);
+            
+            // 正解数ランキングに記録
+            if (isCorrectTop5) {
+                const correctResult = this.ranking.addCorrectAnswersEntry(
+                    trimmedName,
+                    this.score.correctAnswers,
+                    this.score.totalQuestions,
+                    accuracyRate
+                );
+                if (correctResult.isRanked) {
+                    results.push(`正解数ランキング ${correctResult.rank}位`);
+                }
+            }
+            
+            // 連続正解数ランキングに記録
+            if (isConsecutiveTop5) {
+                const consecutiveResult = this.ranking.addConsecutiveAnswersEntry(
+                    trimmedName,
+                    this.score.maxConsecutive,
+                    this.score.totalQuestions,
+                    accuracyRate
+                );
+                if (consecutiveResult.isRanked) {
+                    results.push(`連続正解数ランキング ${consecutiveResult.rank}位`);
+                }
+            }
+            
+            // 結果を表示
+            if (results.length > 0) {
+                alert(`${results.join('、')}に記録されました！`);
+                // ランキング画面を自動で開く
+                setTimeout(() => {
+                    this.showRankings();
+                }, 1000);
+            } else {
+                alert('ランキングに記録されませんでした。');
+            }
+            
+        } catch (error) {
+            console.error('ランキング記録エラー:', error);
+            alert('ランキングの記録に失敗しました。');
+        }
+    }
+    
+    /**
+     * 結果ポップアップを閉じる
+     */
+    closeResultPopup() {
+        const popup = document.getElementById('resultPopup');
+        popup.style.display = 'none';
+        
+        // ランキング入り動画も非表示にする
+        this.hideRankingVideo();
+    }
+    
+    /**
+     * ゲームを再スタート
+     */
+    restartGame() {
+        this.closeResultPopup();
+        
+        // ゲーム状態を完全にリセット
+        this.resetGameState();
+        
+        // ゲームを開始
+        this.startGame();
+    }
+    
+    /**
+     * ゲーム状態を完全にリセット
+     */
+    resetGameState() {
+        // ゲーム状態をリセット
+        this.gameStarted = false;
+        this.score = { totalQuestions: 0, consecutiveCorrect: 0, correctAnswers: 0, maxConsecutive: 0 };
+        this.timeLeft = 60;
+        this.hasPlayedRankinGako = false; // ランクイン音再生フラグをリセット
+        
+        // タイマーをクリア
+        if (this.gameTimer) {
+            clearInterval(this.gameTimer);
+            this.gameTimer = null;
+        }
+        
+        // 全てのアニメーションを停止
+        this.reels.forEach((reel, index) => {
+            clearInterval(this.spinIntervals[index]);
+            this.spinIntervals[index] = null;
+            this.isSpinning[index] = false;
+        });
+        
+        // リールの位置をリセット
+        this.reels.forEach(reel => {
+            reel.style.transform = 'translateY(0px)';
+        });
+        
+        // 問題データをリセット
+        this.currentQuestionData = null;
+        this.currentQuestions = [null, null, null];
+        this.finalPositions = [0, 0, 0];
+        
+        // UI要素をリセット（結果表示は削除済み）
+        
+        // 選択肢を非表示
+        this.answerChoices.style.visibility = 'hidden';
+        this.answerChoices.innerHTML = '';
+        
+        
+        // ランキング入り動画を非表示
+        this.hideRankingVideo();
+        
+        // スタートボタンをリセット、中断ボタンとスコア表示を非表示
+        this.startButton.disabled = false;
+        this.startButton.style.display = 'inline-block';
+        this.startButton.textContent = 'スタート';
+        this.stopButton.style.display = 'none';
+        this.scoreDisplay.style.display = 'none';
+        this.updateScoreDisplay();
+        
+        console.log('ゲーム状態を完全にリセットしました');
+    }
+    
+    /**
+     * ランキング表示
+     */
+    showRankings() {
+        const popup = document.getElementById('rankingPopup');
+        const correctAnswersRanking = document.getElementById('correctAnswersRanking');
+        const consecutiveAnswersRanking = document.getElementById('consecutiveAnswersRanking');
+        
+        // ランキングデータを表示
+        this.displayRanking(correctAnswersRanking, this.ranking.getCorrectAnswersRanking(), 'correctAnswers');
+        this.displayRanking(consecutiveAnswersRanking, this.ranking.getConsecutiveAnswersRanking(), 'consecutiveAnswers');
+        
+        // ポップアップを表示
+        popup.style.display = 'flex';
+    }
+    
+    /**
+     * ランキング表示
+     */
+    displayRanking(container, rankingData, type) {
+        if (rankingData.length === 0) {
+            container.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">ランキングデータがありません</div>';
+            return;
+        }
+        
+        let html = '';
+        rankingData.forEach((entry, index) => {
+            const rank = index + 1;
+            const score = type === 'correctAnswers' ? entry.correctAnswers : entry.consecutiveAnswers;
+            const scoreLabel = type === 'correctAnswers' ? '正解数' : '連続正解数';
+            
+            html += `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #333; ${rank <= 3 ? 'background: rgba(192, 0, 0, 0.2);' : ''}">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="font-weight: bold; color: ${rank <= 3 ? '#ffff00' : '#ffd700'}; min-width: 20px;">${rank}位</span>
+                        <span style="font-weight: bold; color: #ffd700;">${entry.playerName}</span>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-weight: bold; color: #ffd700;">${score}${scoreLabel}</div>
+                        <div style="font-size: 12px; color: #999;">正答率: ${entry.accuracy}%</div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+    }
+    
+    /**
+     * ランキングポップアップを閉じる
+     */
+    closeRankingPopup() {
+        const popup = document.getElementById('rankingPopup');
+        popup.style.display = 'none';
+    }
+    
+    /**
+     * ランキングをクリア
+     */
+    clearRankings() {
+        if (confirm('ランキングデータをすべて削除しますか？\nこの操作は取り消せません。\n本当に削除しますか？')) {
+            this.ranking.clearRankings();
+            alert('ランキングデータをクリアしました。');
+            this.closeRankingPopup();
+        }
+    }
+    
+    /**
+     * ランキングデータをエクスポート
+     */
+    async exportRankings() {
+        try {
+            const exportData = await this.ranking.exportRankings();
+            if (exportData) {
+                // ファイル名を生成
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                const filename = `slot-ranking-${timestamp}.json`;
+                
+                // ダウンロード用のBlobを作成
+                const blob = new Blob([exportData], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                
+                // ダウンロードリンクを作成
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+                alert('ランキングデータをエクスポートしました。');
+            } else {
+                alert('エクスポートに失敗しました。');
+            }
+        } catch (error) {
+            console.error('エクスポートエラー:', error);
+            alert('エクスポートに失敗しました。');
+        }
+    }
+    
+    /**
+     * ランキングデータをインポート
+     */
+    importRankings() {
+        try {
+            // ファイル選択用のinput要素を作成
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = async (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = async (e) => {
+                        try {
+                            const jsonData = e.target.result;
+                            if (await this.ranking.importRankings(jsonData)) {
+                                alert('ランキングデータをインポートしました。');
+                                // ランキング表示を更新
+                                this.showRankings();
+                            } else {
+                                alert('インポートに失敗しました。データ形式を確認してください。');
+                            }
+                        } catch (error) {
+                            console.error('インポートエラー:', error);
+                            alert('インポートに失敗しました。');
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            };
+            input.click();
+        } catch (error) {
+            console.error('インポートエラー:', error);
+            alert('インポートに失敗しました。');
+        }
+    }
+    
+    
+    /**
+     * 完全再起動（システム全体をリセット）
+     */
+    fullRestart() {
+        if (confirm('システム全体を完全に再起動しますか？\nゲーム状態とランキングデータがリセットされます。')) {
+            try {
+                // 結果ポップアップを閉じる
+                this.closeResultPopup();
+                
+                // ランキング入り動画を非表示
+                this.hideRankingVideo();
+                
+                // ゲーム状態を完全にリセット
+                this.resetGameState();
+                
+                // ランキングシステムをリセット
+                this.ranking.clearRankings();
+                console.log('ランキングシステムをリセットしました');
+                
+                // 音響システムをリセット
+                if (this.audio) {
+                    this.audio = new window.SlotAudio();
+                }
+                
+                // ロジックシステムをリセット
+                if (this.logic) {
+                    this.logic = new window.SlotLogic();
+                }
+                
+                // アップロード画面に戻る
+                document.getElementById('uploadScreen').style.display = 'flex';
+                document.getElementById('slotScreen').style.display = 'none';
+                
+                alert('システムの完全再起動が完了しました。');
+                console.log('システムの完全再起動が完了しました');
+                
+            } catch (error) {
+                console.error('完全再起動に失敗しました:', error);
+                alert('完全再起動に失敗しました。ページを手動で再読み込みしてください。');
+            }
+        }
+    }
+    
+    /**
+     * メニューに戻る（リスタート画面に遷移）
+     */
+    returnToMenu() {
+        this.closeResultPopup();
+        
+        // ゲーム状態をリセット
+        this.gameStarted = false;
+        this.score = { totalQuestions: 0, consecutiveCorrect: 0, correctAnswers: 0, maxConsecutive: 0 };
+        this.timeLeft = 60;
+        this.hasPlayedRankinGako = false; // ランクイン音再生フラグをリセット
+        
+        // タイマーをクリア
+        if (this.gameTimer) {
+            clearInterval(this.gameTimer);
+        }
+        
+        // 全てのアニメーションを停止
+        this.reels.forEach((reel, index) => {
+            clearInterval(this.spinIntervals[index]);
+        });
+        
+        
+        // ランキング入り動画を非表示
+        this.hideRankingVideo();
+        
+        // スタートボタンを復活、中断ボタンとスコア表示を非表示
+        this.startButton.disabled = false;
+        this.startButton.style.display = 'inline-block';
+        this.startButton.textContent = 'スタート';
+        this.stopButton.style.display = 'none';
+        this.scoreDisplay.style.display = 'none';
+        this.updateScoreDisplay();
+        
+        // 結果表示は削除済み
+        
+        // 選択肢を非表示
+        this.answerChoices.style.visibility = 'hidden';
+        this.answerChoices.innerHTML = '';
+        
+        // リスタート画面に遷移（スロット画面を表示）
+        document.getElementById('uploadScreen').style.display = 'none';
+        document.getElementById('slotScreen').style.display = 'flex';
+    }
+}
+
+// ページ読み込み完了後にUI初期化
+let slotUI = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    slotUI = new SlotUI();
+    
+    // グローバル関数として公開（デバッグ・テスト用）
+    window.getSlotDebugInfo = () => {
+        if (slotUI) {
+            return slotUI.logic.getDebugInfo();
+        }
+    };
+    
+    window.getCurrentSlotState = () => {
+        if (slotUI) {
+            return {
+                currentQuestions: slotUI.currentQuestions,
+                finalPositions: slotUI.finalPositions,
+                isSpinning: slotUI.isSpinning,
+                score: slotUI.score,
+                currentQuestionData: slotUI.currentQuestionData
+            };
+        }
+    };
+    
+    console.log('阪大作問サークルスロットが初期化されました！');
+    console.log('使用可能なコマンド:');
+    console.log('- getSlotDebugInfo() : デバッグ情報を表示');
+    console.log('- getCurrentSlotState() : 現在のスロット状態を確認');
+    
+    // グローバル関数として公開
+    window.closeResultPopup = () => {
+        if (slotUI && slotUI.audio) {
+            slotUI.audio.playButtonPushedSound();
+        }
+        if (slotUI) {
+            slotUI.closeResultPopup();
+        }
+    };
+    
+    window.restartGame = () => {
+        if (slotUI && slotUI.audio) {
+            slotUI.audio.playButtonPushedSound();
+        }
+        if (slotUI) {
+            slotUI.restartGame();
+        }
+    };
+    
+    window.returnToMenu = () => {
+        if (slotUI && slotUI.audio) {
+            slotUI.audio.playButtonPushedSound();
+        }
+        if (slotUI) {
+            slotUI.returnToMenu();
+        }
+    };
+    
+    window.showRankings = () => {
+        if (slotUI && slotUI.audio) {
+            slotUI.audio.playButtonPushedSound();
+        }
+        if (slotUI) {
+            slotUI.showRankings();
+        }
+    };
+    
+    window.closeRankingPopup = () => {
+        if (slotUI && slotUI.audio) {
+            slotUI.audio.playButtonPushedSound();
+        }
+        if (slotUI) {
+            slotUI.closeRankingPopup();
+        }
+    };
+    
+    window.clearRankings = () => {
+        if (slotUI && slotUI.audio) {
+            slotUI.audio.playButtonPushedSound();
+        }
+        if (slotUI) {
+            slotUI.clearRankings();
+        }
+    };
+    
+    window.exportRankings = () => {
+        if (slotUI && slotUI.audio) {
+            slotUI.audio.playButtonPushedSound();
+        }
+        if (slotUI) {
+            slotUI.exportRankings();
+        }
+    };
+    
+    window.importRankings = () => {
+        if (slotUI && slotUI.audio) {
+            slotUI.audio.playButtonPushedSound();
+        }
+        if (slotUI) {
+            slotUI.importRankings();
+        }
+    };
+    
+    
+    window.fullRestart = () => {
+        if (slotUI && slotUI.audio) {
+            slotUI.audio.playButtonPushedSound();
+        }
+        if (slotUI) {
+            slotUI.fullRestart();
+        }
+    };
+    
+    // メニューからランキング機能を呼び出す関数
+    window.showRankingsFromMenu = () => {
+        if (slotUI && slotUI.audio) {
+            slotUI.audio.playButtonPushedSound();
+        }
+        if (slotUI) {
+            slotUI.showRankings();
+        }
+    };
+    
+    window.exportRankingsFromMenu = () => {
+        if (slotUI && slotUI.audio) {
+            slotUI.audio.playButtonPushedSound();
+        }
+        if (slotUI) {
+            slotUI.exportRankings();
+        }
+    };
+    
+    window.importRankingsFromMenu = () => {
+        if (slotUI && slotUI.audio) {
+            slotUI.audio.playButtonPushedSound();
+        }
+        if (slotUI) {
+            slotUI.importRankings();
+        }
+    };
+    
+});
