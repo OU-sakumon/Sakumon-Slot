@@ -131,6 +131,8 @@ config.local.json
 
 テスト
 slot_stop.mp3
+*.png
+*.json
 
 # 共有可能なファイル
 !スロット-テンプレ.xlsx

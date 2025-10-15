@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>スロット問題生成ツール</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .step {
+            margin-bottom: 40px;
+            padding: 30px;
+            border: 2px solid #f0f0f0;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .step.active {
+            border-color: #4facfe;
+            background: #f8fffe;
+        }
+
+        .step.completed {
+            border-color: #28a745;
+            background: #f8fff8;
+        }
+
+        .step-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .step-number {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #4facfe;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 15px;
+        }
+
+        .step.completed .step-number {
+            background: #28a745;
+        }
+
+        .step-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .file-input-container {
+            position: relative;
+            display: inline-block;
+            margin: 20px 0;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .file-input-label {
+            display: inline-block;
+            padding: 15px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .file-input-label:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            margin: 10px 5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(79, 172, 254, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
+            color: white;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(86, 171, 47, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-weight: 500;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .json-textarea {
+            width: 100%;
+            height: 200px;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 14px;
+            resize: vertical;
+            margin: 15px 0;
+            background: #ffffff;
+            color: #333333;
+            line-height: 1.5;
+        }
+
+        .json-textarea:focus {
+            outline: none;
+            border-color: #4facfe;
+            box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.1);
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .file-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border-left: 4px solid #4facfe;
+        }
+
+        .error-details {
+            background: #fff5f5;
+            border: 1px solid #fed7d7;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+
+        .error-details h4 {
+            color: #c53030;
+            margin-bottom: 10px;
+        }
+
+        .error-details ul {
+            margin-left: 20px;
+        }
+
+        .error-details li {
+            margin: 5px 0;
+            color: #742a2a;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎰 スロット問題生成ツール</h1>
+            <p>Excelファイルからスロット問題を簡単に生成できます</p>
+        </div>
+
+        <div class="content">
+            <!-- Step 1: ファイルアップロード -->
+            <div class="step" id="step1">
+                <div class="step-header">
+                    <div class="step-number">1</div>
+                    <div class="step-title">Excelファイルをアップロード</div>
+                </div>
+                <p>スロット問題の設定が含まれたExcelファイルを選択してください。</p>
+                <div class="file-input-container">
+                    <input type="file" id="excelFile" class="file-input" accept=".xlsx,.xls">
+                    <label for="excelFile" class="file-input-label">
+                        📁 Excelファイルを選択
+                    </label>
+                </div>
+                <div id="fileInfo" class="file-info hidden">
+                    <strong>選択されたファイル:</strong> <span id="fileName"></span><br>
+                    <strong>ファイルサイズ:</strong> <span id="fileSize"></span>
+                </div>
+                <div id="step1Status"></div>
+            </div>
+
+            <!-- Step 2: ファイル検証 -->
+            <div class="step" id="step2">
+                <div class="step-header">
+                    <div class="step-number">2</div>
+                    <div class="step-title">ファイル構造を検証</div>
+                </div>
+                <p>アップロードされたファイルの構造をチェックします。</p>
+                <button id="validateBtn" class="btn btn-primary" disabled>検証を開始</button>
+                <div id="step2Status"></div>
+                <div id="validationResults"></div>
+            </div>
+
+            <!-- Step 3: 問題生成 -->
+            <div class="step" id="step3">
+                <div class="step-header">
+                    <div class="step-number">3</div>
+                    <div class="step-title">問題を生成</div>
+                </div>
+                <p>制約条件に基づいて問題の組み合わせを生成し、Problems.txtを作成します。</p>
+                <button id="generateBtn" class="btn btn-primary" disabled>問題を生成</button>
+                <div id="step3Status"></div>
+                <div id="generationResults"></div>
+            </div>
+
+            <!-- Step 4: AI解答入力 -->
+            <div class="step" id="step4">
+                <div class="step-header">
+                    <div class="step-number">4</div>
+                    <div class="step-title">AI解答を入力</div>
+                </div>
+                <p>生成されたProblems.txtをAIチャットに送信し、出力されたJSONを貼り付けてください。</p>
+                <button id="copyPromptBtn" class="btn btn-primary">プロンプトをコピー</button>
+                <textarea id="jsonInput" class="json-textarea" placeholder="AIから出力されたJSONをここに貼り付けてください"></textarea>
+                <button id="importBtn" class="btn btn-success" disabled>解答をインポート</button>
+                <div id="step4Status"></div>
+            </div>
+
+            <!-- Step 5: 完了 -->
+            <div class="step" id="step5">
+                <div class="step-header">
+                    <div class="step-number">5</div>
+                    <div class="step-title">完了</div>
+                </div>
+                <p>スロット.xlsxファイルが生成されました。ダウンロードしてご利用ください。</p>
+                <button id="downloadBtn" class="btn btn-success" disabled>スロット.xlsxをダウンロード</button>
+                <div id="step5Status"></div>
+            </div>
+
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

@@ -9,20 +9,35 @@
 - ⏱️ **時間制限**: 1分間の間で解けた問題数、最大連続正解数を競います。
 - 🏆 **ランキング**: ランキングの表示・インポート・エクスポートができます。
 - 🎵 **効果音・演出効果**: 効果音および、演出効果が含まれています。
+- 🖼️ **画像ベースシステム**: スロットのリールと選択肢は画像として表示されます。
+- 📦 **Zipファイルアップロード**: Excelファイルと画像フォルダをまとめてZipファイルでアップロードできます。
 
 
 ## インストール
 
-1. リポジトリをクローンまたはダウンロード
-```bash
-git clone https://ou-sakumon.github.io/Sakumon-Slot.git
-cd Sakumon-Slot
-```
+リポジトリをクローンまたはダウンロード、Webサイトからプレイ
 
-2. Webサイトからプレイ
+**スロットゲーム**: https://ou-sakumon.github.io/Sakumon-Slot/ローンチ/index.html
 
-https://ou-sakumon.github.io/Sakumon-Slot/ローンチ/index.html
+**問題生成ツール**: https://ou-sakumon.github.io/Sakumon-Slot/開発/make_anssheet/index.html
 
+
+## 使用方法
+
+1. **Zipファイルの準備**: 
+   - Excelファイル（Que_L、Que_C、Que_R、Ansシート）を作成
+   - 画像フォルダ（Que_L_B、Que_C_B、Que_R_B、Ans_D、Ans_E、Ans_F、Ans_G）を作成し、対応する画像を配置
+   - これらを1つのフォルダにまとめてZip圧縮
+
+2. **アップロード**: 
+   - スロットゲームを開く
+   - 作成したZipファイルをアップロード
+
+3. **プレイ**: 
+   - 「スタート」ボタンを押してゲーム開始
+   - 1分間でできるだけ多くの問題を解答
+
+詳細は`docs/imageフォルダのルール.md`をご覧ください。
 
 ## 各種設定
 

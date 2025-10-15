@@ -271,7 +271,6 @@
             max-width: 100%;
             max-height: 100%;
             object-fit: contain;
-            filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.8)) drop-shadow(0 0 20px rgba(255, 215, 0, 0.5));
         }
 
         .slot-container {
@@ -283,8 +282,8 @@
         }
 
         .slot-column {
-            background: #0a0a0a;
-            width: 250px;
+            background: #ffffff;
+            width: 312.5px; /* 2000:1600 = 5:4 = 1.25:1 のアスペクト比を維持 (250px * 1.25) */
             height: 250px;
             overflow: hidden;
             position: relative;
@@ -292,8 +291,7 @@
             box-shadow: 
                 0 0 0 4px #000,
                 0 0 0 8px #ffd700,
-                0 0 0 12px #000,
-                inset 0 3px 20px rgba(0, 0, 0, 0.8);
+                0 0 0 12px #000;
         }
 
         .slot-reel {
@@ -301,29 +299,30 @@
             width: 100%;
             transition: transform 0.05s ease-out;
             will-change: transform; /* ハードウェアアクセラレーションを有効化 */
+            display: flex;
+            flex-direction: column; /* シンボルを縦に並べる */
         }
 
         .slot-symbol {
-            height: 83.33px;
+            height: 250px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 16px;
-            font-weight: bold;
-            border-bottom: 1px solid #333;
-            background: #1a1a1a;
-            padding: 8px;
-            text-align: center;
-            line-height: 1.4;
-            color: #ffd700;
-            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-            hyphens: auto;
+            background: #ffffff;
+            overflow: hidden;
+            position: relative;
+            flex-shrink: 0; /* シンボルが縮まないようにする */
+        }
+
+        .slot-symbol img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
         }
 
         .slot-symbol:nth-child(odd) {
-            background: #0f0f0f;
+            background: #ffffff;
         }
 
         .button-container {
@@ -477,33 +476,45 @@
             justify-content: center;
             min-height: 80px;
             align-items: center;
-            visibility: hidden;
+            visibility: visible;
             width: 100%;
             box-sizing: border-box;
         }
 
         .answer-choice {
-            background: linear-gradient(135deg, #c00000 0%, #8b0000 100%);
+            background: #ffffff;
             color: white;
             border: none;
-            padding: 15px 30px;
+            padding: 10px;
             border-radius: 8px;
-            font-size: 16px;
-            font-weight: bold;
             cursor: pointer;
             transition: all 0.3s ease;
-            width: 300px;
-            max-width: 300px;
+            width: 250px;
+            height: 150px;
             box-shadow: 
                 0 0 0 4px #000,
                 0 0 0 8px #ffd700,
                 0 0 0 12px #000,
                 0 4px 15px rgba(0, 0, 0, 0.5);
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-            text-align: center;
-            line-height: 1.4;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
             flex-shrink: 0;
+        }
+
+        .answer-choice.disabled {
+            background: #666666;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .answer-choice img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center;
+            display: block;
         }
 
         .answer-choice:hover {
@@ -1000,15 +1011,14 @@
     <div id="uploadScreen" class="upload-container">
         <h1 class="upload-title">データアップロード</h1>
         <p class="upload-description">
-            スロットゲーム用のExcelファイルをアップロードしてください。<br>
-            要件に従ったシート構成（Que_L, Que_C, Que_R, Ans）が必要です。
+            スロットゲーム用のZipファイルをアップロードしてください。
         </p>
         
         <div class="file-upload-area" id="fileUploadArea">
-            <div class="upload-icon">📁</div>
-            <div class="upload-text">ファイルをドラッグ&ドロップ</div>
+            <div class="upload-icon">📦</div>
+            <div class="upload-text">Zipファイルをドラッグ&ドロップ</div>
             <div class="upload-subtext">またはクリックしてファイルを選択</div>
-            <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls">
+            <input type="file" id="fileInput" class="file-input" accept=".zip">
         </div>
         
         
@@ -1198,6 +1208,9 @@
     <!-- Excel読み込み用ライブラリ -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     
+    <!-- Zip解凍用ライブラリ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
     
     <!-- ロジック部分 -->
     <script src="slot-logic.js?v=3"></script>
@@ -1271,16 +1284,16 @@
             // ファイルアップロード処理
             async function handleFileUpload(file) {
                 // ファイル形式チェック
-                if (!file.name.match(/\.(xlsx|xls)$/i)) {
-                    showError('Excelファイル（.xlsx, .xls）を選択してください。');
+                if (!file.name.match(/\.zip$/i)) {
+                    showError('Zipファイル（.zip）を選択してください。');
                     return;
                 }
                 
                 // デバッグ用：slotLogicの状態を確認
                 console.log('slotLogic:', window.slotLogic);
-                console.log('loadFromExcelFile method:', typeof window.slotLogic?.loadFromExcelFile);
+                console.log('loadFromZipFile method:', typeof window.slotLogic?.loadFromZipFile);
                 
-                if (!window.slotLogic || typeof window.slotLogic.loadFromExcelFile !== 'function') {
+                if (!window.slotLogic || typeof window.slotLogic.loadFromZipFile !== 'function') {
                     showError('スロットロジックが正しく初期化されていません。ページを再読み込みしてください。');
                     return;
                 }
@@ -1291,13 +1304,14 @@
                 
                 // プログレス表示
                 showProgress();
-                updateProgress(0, 'ファイルを読み込み中...');
+                updateProgress(0, 'Zipファイルを読み込み中...');
                 
                 try {
-                    // スロットロジックでファイルを読み込み
-                    await window.slotLogic.loadFromExcelFile(file);
+                    // スロットロジックでZipファイルを読み込み
+                    updateProgress(10, 'Zipファイルを解凍中...');
+                    await window.slotLogic.loadFromZipFile(file);
                     
-                    updateProgress(50, 'データを検証中...');
+                    updateProgress(80, 'データを検証中...');
                     
                     // データの検証
                     if (!window.slotLogic.isDataReady()) {

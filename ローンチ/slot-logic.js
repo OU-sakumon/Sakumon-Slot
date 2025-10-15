@@ -5,18 +5,32 @@
 
 class SlotLogic {
     constructor() {
-        // 要件に従ったデータ構造
-        this.que_L = []; // Que_L シートのデータ: [{type: string, question: string}]
-        this.que_C = []; // Que_C シートのデータ: [{type: string, question: string}]
-        this.que_R = []; // Que_R シートのデータ: [{type: string, question: string}]
+        // 画像ベースのシステム - Excelシートは不要
         this.ans = [];   // Ans シートのデータ: [{row_L: number, row_C: number, row_R: number, ans: string, lie_answer1: string, lie_answer2: string, lie_answer3: string}]
+        
+        // 画像キャッシュ（Blob URLを保存）
+        this.imageCache = new Map(); // key: "Que_L_B/1.png", value: Blob URL
+        
+        // 画像パスの設定（フォルダ名のみ）
+        this.queLeftPath = 'Que_L_B/';
+        this.queCenterPath = 'Que_C_B/';
+        this.queRightPath = 'Que_R_B/';
+        this.ansCorrectPath = 'Ans_D/';
+        this.ansWrong1Path = 'Ans_E/';
+        this.ansWrong2Path = 'Ans_F/';
+        this.ansWrong3Path = 'Ans_G/';
+        
+        // 利用可能な画像の行番号リスト（Que_L_B、Que_C_B、Que_R_Bから取得）
+        this.availableLeftRows = [];
+        this.availableCenterRows = [];
+        this.availableRightRows = [];
         
         // スロット設定
         this.reelCount = 3;
-        this.symbolHeight = 83.33; // px
+        this.symbolHeight = 250; // px - 画像サイズに合わせて調整（横2000px × 縦1600px → 250px高さでアスペクト比維持）
         this.symbolsPerReel = 30; // 連続したリストのため増加
         this.spinSpeed = 20; // ms間隔（より早く）
-        this.visibleRows = 3; // 画面に見える行数
+        this.visibleRows = 1; // 画面に見える行数（画像は1つずつ表示）
         this.currentAnswer = null; // 現在の問題の解答データ
         this.recentQuestions = []; // 最近使用した問題のインデックス（重複回避用）
         this.maxRecentQuestions = 3; // 最近使用した問題の最大保持数
@@ -25,19 +39,159 @@ class SlotLogic {
         this.isDataLoaded = false;
         
         // 初期化時はデータを読み込まない（アップロード後に読み込む）
-        console.log('SlotLogic初期化完了 - データのアップロードを待機中');
+        console.log('SlotLogic初期化完了（画像ベース） - データのアップロードを待機中');
     }
     
     
+    /**
+     * Zipファイルからデータを読み込み（画像とExcelを含む）
+     * @param {File} file - アップロードされたZipファイル
+     * @returns {Promise<boolean>} 読み込み成功かどうか
+     */
+    async loadFromZipFile(file) {
+        try {
+            console.log('Zipファイルからデータを読み込み中:', file.name);
+            
+            // Zipファイルを解凍
+            const zip = await JSZip.loadAsync(file);
+            
+            // Excelファイルを検索
+            let excelFile = null;
+            let excelFileName = null;
+            for (const [filename, zipEntry] of Object.entries(zip.files)) {
+                if (!zipEntry.dir && (filename.endsWith('.xlsx') || filename.endsWith('.xls'))) {
+                    // パスの一番最後の部分（ファイル名）を取得
+                    const parts = filename.split('/');
+                    const actualFilename = parts[parts.length - 1];
+                    if (actualFilename && !actualFilename.startsWith('.') && !actualFilename.startsWith('~')) {
+                        excelFile = zipEntry;
+                        excelFileName = filename;
+                        break;
+                    }
+                }
+            }
+            
+            if (!excelFile) {
+                throw new Error('Zipファイル内にExcelファイルが見つかりません');
+            }
+            
+            console.log('Excelファイルを発見:', excelFileName);
+            
+            // Excelファイルを読み込み
+            const excelData = await excelFile.async('arraybuffer');
+            const workbook = XLSX.read(excelData, { type: 'array' });
+            
+            // Ansシートのデータを取得
+            this.ans = this.parseAnswerSheetData(workbook, 'Ans');
+            
+            // Que_L、Que_C、Que_Rシートから利用可能な行番号リストを取得
+            this.availableLeftRows = this.parseRowNumbers(workbook, 'Que_L');
+            this.availableCenterRows = this.parseRowNumbers(workbook, 'Que_C');
+            this.availableRightRows = this.parseRowNumbers(workbook, 'Que_R');
+            
+            // データの検証
+            if (this.ans.length === 0) {
+                throw new Error('Ansシートにデータがありません');
+            }
+            
+            if (this.availableLeftRows.length === 0 || this.availableCenterRows.length === 0 || this.availableRightRows.length === 0) {
+                throw new Error('Que_L、Que_C、Que_Rシートにデータがありません');
+            }
+            
+            // 画像を読み込み
+            await this.loadImagesFromZip(zip);
+            
+            // データ読み込み完了
+            this.isDataLoaded = true;
+            console.log('Zipファイルからのデータ読み込み完了');
+            console.log(`Ans: ${this.ans.length}件`);
+            console.log(`利用可能な画像 - Left: ${this.availableLeftRows.length}件, Center: ${this.availableCenterRows.length}件, Right: ${this.availableRightRows.length}件`);
+            console.log(`画像キャッシュ: ${this.imageCache.size}件`);
+            
+            return true;
+            
+        } catch (error) {
+            console.error('Zipファイル読み込みエラー:', error);
+            this.isDataLoaded = false;
+            throw error;
+        }
+    }
     
     /**
-     * Excelファイルからデータを読み込み
+     * Zipファイルから画像を読み込み
+     * @param {JSZip} zip - JSZipオブジェクト
+     * @returns {Promise<void>}
+     */
+    async loadImagesFromZip(zip) {
+        console.log('Zipファイルから画像を読み込み中...');
+        
+        const imageFolders = [
+            this.queLeftPath,
+            this.queCenterPath,
+            this.queRightPath,
+            this.ansCorrectPath,
+            this.ansWrong1Path,
+            this.ansWrong2Path,
+            this.ansWrong3Path
+        ];
+        
+        let loadedCount = 0;
+        
+        for (const [filename, zipEntry] of Object.entries(zip.files)) {
+            // ディレクトリはスキップ
+            if (zipEntry.dir) continue;
+            
+            // .pngファイルのみを処理
+            if (!filename.toLowerCase().endsWith('.png')) continue;
+            
+            // パスを正規化（先頭の/を削除、バックスラッシュをスラッシュに変換）
+            let normalizedPath = filename.replace(/\\/g, '/').replace(/^\/+/, '');
+            
+            // 画像フォルダに含まれるか確認
+            let matchedFolder = null;
+            for (const folder of imageFolders) {
+                // フォルダ名を含むパスを確認
+                const folderIndex = normalizedPath.lastIndexOf(folder);
+                if (folderIndex !== -1) {
+                    // フォルダ以降のパスを取得（例：Que_L_B/1.png）
+                    normalizedPath = normalizedPath.substring(folderIndex);
+                    matchedFolder = folder;
+                    break;
+                }
+            }
+            
+            if (!matchedFolder) {
+                continue; // 対象フォルダに含まれない画像はスキップ
+            }
+            
+            try {
+                // 画像をBlobとして読み込み
+                const blob = await zipEntry.async('blob');
+                // Blob URLを作成
+                const blobUrl = URL.createObjectURL(blob);
+                // キャッシュに保存
+                this.imageCache.set(normalizedPath, blobUrl);
+                loadedCount++;
+                
+                if (loadedCount % 50 === 0) {
+                    console.log(`画像読み込み中... ${loadedCount}件`);
+                }
+            } catch (error) {
+                console.error(`画像読み込みエラー: ${filename}`, error);
+            }
+        }
+        
+        console.log(`画像読み込み完了: ${loadedCount}件`);
+    }
+    
+    /**
+     * Excelファイルからデータを読み込み（画像ベース）
      * @param {File} file - アップロードされたExcelファイル
      * @returns {Promise<boolean>} 読み込み成功かどうか
      */
     async loadFromExcelFile(file) {
         try {
-            console.log('Excelファイルからデータを読み込み中:', file.name);
+            console.log('Excelファイルからデータを読み込み中（画像ベース）:', file.name);
             
             // ファイルを読み込み
             const arrayBuffer = await this.readFileAsArrayBuffer(file);
@@ -45,21 +199,28 @@ class SlotLogic {
             // Excelファイルを解析
             const workbook = XLSX.read(arrayBuffer, { type: 'array' });
             
-            // 各シートのデータを取得
-            this.que_L = this.parseSheetData(workbook, 'Que_L');
-            this.que_C = this.parseSheetData(workbook, 'Que_C');
-            this.que_R = this.parseSheetData(workbook, 'Que_R');
+            // Ansシートのデータを取得
             this.ans = this.parseAnswerSheetData(workbook, 'Ans');
             
+            // Que_L、Que_C、Que_Rシートから利用可能な行番号リストを取得
+            this.availableLeftRows = this.parseRowNumbers(workbook, 'Que_L');
+            this.availableCenterRows = this.parseRowNumbers(workbook, 'Que_C');
+            this.availableRightRows = this.parseRowNumbers(workbook, 'Que_R');
+            
             // データの検証
-            if (this.que_L.length === 0 || this.que_C.length === 0 || this.que_R.length === 0 || this.ans.length === 0) {
-                throw new Error('必要なデータが不足しています');
+            if (this.ans.length === 0) {
+                throw new Error('Ansシートにデータがありません');
+            }
+            
+            if (this.availableLeftRows.length === 0 || this.availableCenterRows.length === 0 || this.availableRightRows.length === 0) {
+                throw new Error('Que_L、Que_C、Que_Rシートにデータがありません');
             }
             
             // データ読み込み完了
             this.isDataLoaded = true;
-            console.log('Excelファイルからのデータ読み込み完了');
-            console.log(`Que_L: ${this.que_L.length}件, Que_C: ${this.que_C.length}件, Que_R: ${this.que_R.length}件, Ans: ${this.ans.length}件`);
+            console.log('Excelファイルからのデータ読み込み完了（画像ベース）');
+            console.log(`Ans: ${this.ans.length}件`);
+            console.log(`利用可能な画像 - Left: ${this.availableLeftRows.length}件, Center: ${this.availableCenterRows.length}件, Right: ${this.availableRightRows.length}件`);
             
             return true;
             
@@ -85,32 +246,47 @@ class SlotLogic {
     }
     
     /**
-     * シートデータを解析（Que_L, Que_C, Que_R用）
+     * 画像パスからBlob URLを取得
+     * @param {string} imagePath - 画像パス（例：Que_L_B/1.png）
+     * @returns {string} Blob URL
+     */
+    getImageUrl(imagePath) {
+        // キャッシュにある場合はBlob URLを返す
+        if (this.imageCache.has(imagePath)) {
+            return this.imageCache.get(imagePath);
+        }
+        
+        // キャッシュにない場合は、プレースホルダーまたはエラーを返す
+        console.warn(`画像が見つかりません: ${imagePath}`);
+        return ''; // 空の文字列を返す（画像が表示されない）
+    }
+    
+    /**
+     * シートから利用可能な行番号リストを取得（Que_L, Que_C, Que_R用）
      * @param {Object} workbook - XLSXワークブック
      * @param {string} sheetName - シート名
-     * @returns {Array} 解析されたデータ
+     * @returns {Array} 行番号のリスト
      */
-    parseSheetData(workbook, sheetName) {
+    parseRowNumbers(workbook, sheetName) {
         const sheet = workbook.Sheets[sheetName];
         if (!sheet) {
             throw new Error(`シート "${sheetName}" が見つかりません`);
         }
         
         const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-        const data = [];
+        const rowNumbers = [];
         
-        // ヘッダー行をスキップしてデータを解析
+        // ヘッダー行をスキップして行番号を取得（Excelの行番号は2から開始）
         for (let i = 1; i < jsonData.length; i++) {
             const row = jsonData[i];
-            if (row && row.length >= 2 && row[0] && row[1]) {
-                data.push({
-                    type: String(row[0]).trim(),
-                    question: String(row[1]).trim()
-                });
+            if (row && row.length >= 1) {
+                // Excelの行番号（2から始まる）
+                const excelRowNumber = i + 1;
+                rowNumbers.push(excelRowNumber);
             }
         }
         
-        return data;
+        return rowNumbers;
     }
     
     /**
@@ -148,31 +324,37 @@ class SlotLogic {
     }
 
     /**
-     * JSONデータからデータを設定
+     * JSONデータからデータを設定（画像ベース）
      * @param {Object} jsonData - アップロードされたJSONデータ
      */
     setDataFromJson(jsonData) {
         try {
-            console.log('JSONデータからデータを設定中:', jsonData);
+            console.log('JSONデータからデータを設定中（画像ベース）:', jsonData);
             
-            // 各シートのデータを設定
-            this.que_L = jsonData.Que_L || [];
-            this.que_C = jsonData.Que_C || [];
-            this.que_R = jsonData.Que_R || [];
+            // Ansシートのデータを設定
             this.ans = jsonData.Ans || [];
             
+            // 利用可能な行番号リストを設定
+            this.availableLeftRows = jsonData.availableLeftRows || [];
+            this.availableCenterRows = jsonData.availableCenterRows || [];
+            this.availableRightRows = jsonData.availableRightRows || [];
+            
             // データの検証
-            if (this.que_L.length === 0 || this.que_C.length === 0 || this.que_R.length === 0 || this.ans.length === 0) {
-                throw new Error('必要なデータが不足しています');
+            if (this.ans.length === 0) {
+                throw new Error('Ansシートにデータがありません');
+            }
+            
+            if (this.availableLeftRows.length === 0 || this.availableCenterRows.length === 0 || this.availableRightRows.length === 0) {
+                throw new Error('利用可能な行番号リストが不足しています');
             }
             
             this.isDataLoaded = true;
             
-            console.log('データ設定完了:', {
-                Que_L: this.que_L.length,
-                Que_C: this.que_C.length,
-                Que_R: this.que_R.length,
-                Ans: this.ans.length
+            console.log('データ設定完了（画像ベース）:', {
+                Ans: this.ans.length,
+                availableLeftRows: this.availableLeftRows.length,
+                availableCenterRows: this.availableCenterRows.length,
+                availableRightRows: this.availableRightRows.length
             });
             
         } catch (error) {
@@ -182,41 +364,15 @@ class SlotLogic {
     }
     
     /**
-     * データが読み込まれているかチェック
+     * データが読み込まれているかチェック（画像ベース）
      * @returns {boolean} データ読み込み状態
      */
     isDataReady() {
-        return this.isDataLoaded && this.que_L.length > 0 && this.que_C.length > 0 && this.que_R.length > 0 && this.ans.length > 0;
-    }
-    
-    /**
-     * Que_L シートのデータを設定
-     * @param {Array} newQue_L - 新しいQue_Lデータ
-     */
-    setQue_L(newQue_L) {
-        if (Array.isArray(newQue_L)) {
-            this.que_L = newQue_L;
-        }
-    }
-    
-    /**
-     * Que_C シートのデータを設定
-     * @param {Array} newQue_C - 新しいQue_Cデータ
-     */
-    setQue_C(newQue_C) {
-        if (Array.isArray(newQue_C)) {
-            this.que_C = newQue_C;
-        }
-    }
-    
-    /**
-     * Que_R シートのデータを設定
-     * @param {Array} newQue_R - 新しいQue_Rデータ
-     */
-    setQue_R(newQue_R) {
-        if (Array.isArray(newQue_R)) {
-            this.que_R = newQue_R;
-        }
+        return this.isDataLoaded && 
+               this.ans.length > 0 && 
+               this.availableLeftRows.length > 0 && 
+               this.availableCenterRows.length > 0 && 
+               this.availableRightRows.length > 0;
     }
     
     /**
@@ -230,30 +386,6 @@ class SlotLogic {
     }
     
     /**
-     * 現在のQue_Lデータを取得
-     * @returns {Array} Que_Lデータ
-     */
-    getQue_L() {
-        return this.que_L;
-    }
-    
-    /**
-     * 現在のQue_Cデータを取得
-     * @returns {Array} Que_Cデータ
-     */
-    getQue_C() {
-        return this.que_C;
-    }
-    
-    /**
-     * 現在のQue_Rデータを取得
-     * @returns {Array} Que_Rデータ
-     */
-    getQue_R() {
-        return this.que_R;
-    }
-    
-    /**
      * 現在のAnsデータを取得
      * @returns {Array} Ansデータ
      */
@@ -262,8 +394,8 @@ class SlotLogic {
     }
     
     /**
-     * ランダムな問題を選択（要件に準拠：Ansシートからランダムに取得）
-     * @returns {Object} 選択された問題と解答データ
+     * ランダムな問題を選択（画像ベース）
+     * @returns {Object} 選択された問題と解答データ（画像パス）
      */
     selectRandomQuestion() {
         if (!this.isDataReady()) {
@@ -274,7 +406,7 @@ class SlotLogic {
         // Ansシートからランダムに取得（重複回避機能付き + 空白データ回避）
         let randomIndex;
         let attempts = 0;
-        const maxAttempts = 50; // 最大試行回数を増加（空白データ回避のため）
+        const maxAttempts = 50; // 最大試行回数
         
         do {
             const randomValue = Math.random();
@@ -288,9 +420,8 @@ class SlotLogic {
             
             const answerData = this.ans[randomIndex];
             
-            // D、E、F列（答え、間違い回答1、間違い回答2）のいずれかが空白でないかチェック
-            if (!answerData.ans || !answerData.lie_answer1 || !answerData.lie_answer2) {
-                // console.log(`空白データをスキップ: インデックス ${randomIndex}`, answerData);
+            // データの存在確認（行番号があるかチェック）
+            if (!answerData.row_L || !answerData.row_C || !answerData.row_R) {
                 continue;
             }
             
@@ -312,59 +443,70 @@ class SlotLogic {
         }
         
         const answerData = this.ans[randomIndex];
+        const ansRowNumber = randomIndex + 2; // Excelの行番号（ヘッダー行を考慮して+2）
         
-        // デバッグ情報を追加
-        // console.log(`ランダム選択: インデックス ${randomIndex}/${this.ans.length - 1} (試行回数: ${attempts})`);
-        // console.log('最近使用した問題:', this.recentQuestions);
-        // console.log('選択された解答データ:', answerData);
+        console.log(`ランダム選択: Ans行番号 ${ansRowNumber} (インデックス ${randomIndex})`);
+        console.log('選択された解答データ:', answerData);
         
-        // 行番号から各パーツの問題文を取得（1ベースの行番号を0ベースのインデックスに変換）
-        const leftPart = this.que_L[answerData.row_L - 2];
-        const centerPart = this.que_C[answerData.row_C - 2];
-        const rightPart = this.que_R[answerData.row_R - 2];
+        // 画像パスを生成してBlob URLを取得
+        const leftImagePath = `${this.queLeftPath}${answerData.row_L}.png`;
+        const centerImagePath = `${this.queCenterPath}${answerData.row_C}.png`;
+        const rightImagePath = `${this.queRightPath}${answerData.row_R}.png`;
         
-        // データの存在確認
-        if (!leftPart || !centerPart || !rightPart) {
-            console.error('問題データが見つかりません:', answerData);
-            return null;
-        }
+        const leftImageUrl = this.getImageUrl(leftImagePath);
+        const centerImageUrl = this.getImageUrl(centerImagePath);
+        const rightImageUrl = this.getImageUrl(rightImagePath);
         
-        // console.log('選択された問題パーツ:');
-        // console.log('左:', leftPart.question);
-        // console.log('中央:', centerPart.question);
-        // console.log('右:', rightPart.question);
+        console.log('選択された問題画像パス:');
+        console.log('左:', leftImagePath, '→', leftImageUrl);
+        console.log('中央:', centerImagePath, '→', centerImageUrl);
+        console.log('右:', rightImagePath, '→', rightImageUrl);
         
         this.currentAnswer = answerData;
+        this.currentAnsRowNumber = ansRowNumber; // 現在のAns行番号を記録
         
         return {
-            left: leftPart,
-            center: centerPart,
-            right: rightPart,
-            answer: answerData
+            left: { imagePath: leftImagePath, imageUrl: leftImageUrl, rowNumber: answerData.row_L },
+            center: { imagePath: centerImagePath, imageUrl: centerImageUrl, rowNumber: answerData.row_C },
+            right: { imagePath: rightImagePath, imageUrl: rightImageUrl, rowNumber: answerData.row_R },
+            answer: answerData,
+            ansRowNumber: ansRowNumber
         };
     }
     
     /**
-     * リール用のシンボル配列を生成（連続したリストで空のスロットを防ぐ）
+     * リール用の画像パス配列を生成（画像ベース）
      * @param {string} reelType - リールの種類（left, center, right）
-     * @returns {Array} シンボルの配列
+     * @returns {Array} 画像パスとBlob URLの配列
      */
     generateReelSymbols(reelType) {
-        let parts;
+        let rowNumbers;
+        let folderPath;
+        
         if (reelType === 'left') {
-            parts = this.que_L;
+            rowNumbers = this.availableLeftRows;
+            folderPath = this.queLeftPath;
         } else if (reelType === 'center') {
-            parts = this.que_C;
+            rowNumbers = this.availableCenterRows;
+            folderPath = this.queCenterPath;
         } else if (reelType === 'right') {
-            parts = this.que_R;
+            rowNumbers = this.availableRightRows;
+            folderPath = this.queRightPath;
         }
         
         const reelSymbols = [];
         // 連続したリストを生成（空のスロットを防ぐため複数回繰り返し）
-        const repeatCount = Math.ceil(this.symbolsPerReel / parts.length) + 2; // 余裕を持って2回多く
+        const repeatCount = Math.ceil(this.symbolsPerReel / rowNumbers.length) + 2; // 余裕を持って2回多く
         for (let repeat = 0; repeat < repeatCount; repeat++) {
-            for (let i = 0; i < parts.length; i++) {
-                reelSymbols.push(parts[i].question);
+            for (let i = 0; i < rowNumbers.length; i++) {
+                const rowNumber = rowNumbers[i];
+                const imagePath = `${folderPath}${rowNumber}.png`;
+                const imageUrl = this.getImageUrl(imagePath);
+                reelSymbols.push({
+                    imagePath: imagePath,
+                    imageUrl: imageUrl,
+                    rowNumber: rowNumber
+                });
             }
         }
         
@@ -384,42 +526,41 @@ class SlotLogic {
     }
     
     /**
-     * 指定した問題パーツが中央に来る位置を取得
-     * @param {string} targetQuestion - 目標問題文
+     * 指定した行番号が中央に来る位置を取得（画像ベース）
+     * @param {number} targetRowNumber - 目標行番号
      * @param {string} reelType - リールの種類
      * @returns {number} 位置（見つからない場合はランダム位置）
      */
-    getPositionForQuestion(targetQuestion, reelType) {
-        let parts;
+    getPositionForQuestion(targetRowNumber, reelType) {
+        let rowNumbers;
         if (reelType === 'left') {
-            parts = this.que_L;
+            rowNumbers = this.availableLeftRows;
         } else if (reelType === 'center') {
-            parts = this.que_C;
+            rowNumbers = this.availableCenterRows;
         } else if (reelType === 'right') {
-            parts = this.que_R;
+            rowNumbers = this.availableRightRows;
         }
         
-        const symbolIndex = parts.findIndex(part => part.question === targetQuestion);
+        const symbolIndex = rowNumbers.findIndex(rowNum => rowNum === targetRowNumber);
         
         if (symbolIndex === -1) {
-            console.warn(`問題文が見つかりません: ${targetQuestion}`);
+            console.warn(`行番号が見つかりません: ${targetRowNumber}`);
             return this.generateStopPosition();
         }
         
         // 中央に来るようにトップ基準のインデックスへ補正して位置を計算
-        // visibleRowsが3の場合、centerOffsetは1（0, 1, 2のうち1が中央）
+        // visibleRowsが1の場合、centerOffsetは0（画像は1つずつ表示）
         const centerOffset = Math.floor(this.visibleRows / 2);
         // 目標のシンボルを中央に配置するため、トップ位置を計算
-        // 例: symbolIndex=5, centerOffset=1 の場合、topIndex=4 (0-based)
         let topIndex = symbolIndex - centerOffset;
         if (topIndex < 0) {
-            topIndex += parts.length;
+            topIndex += rowNumbers.length;
         }
         
         // 位置を計算（負の値）
         const position = topIndex * -this.symbolHeight;
         
-        // console.log(`問題文→位置変換 (${reelType}): question="${targetQuestion}", symbolIndex=${symbolIndex}, centerOffset=${centerOffset}, topIndex=${topIndex}, position=${position}px, symbolHeight=${this.symbolHeight}px`);
+        console.log(`行番号→位置変換 (${reelType}): rowNumber=${targetRowNumber}, symbolIndex=${symbolIndex}, centerOffset=${centerOffset}, topIndex=${topIndex}, position=${position}px, symbolHeight=${this.symbolHeight}px`);
         
         return position;
     }
@@ -434,19 +575,19 @@ class SlotLogic {
     }
     
     /**
-     * 位置から問題文を取得
+     * 位置から行番号を取得（画像ベース）
      * @param {number} position - リールの位置（通常は負の値）
      * @param {string} reelType - リールの種類
-     * @returns {string} 問題文
+     * @returns {number} 行番号
      */
     getQuestionFromPosition(position, reelType) {
-        let parts;
+        let rowNumbers;
         if (reelType === 'left') {
-            parts = this.que_L;
+            rowNumbers = this.availableLeftRows;
         } else if (reelType === 'center') {
-            parts = this.que_C;
+            rowNumbers = this.availableCenterRows;
         } else if (reelType === 'right') {
-            parts = this.que_R;
+            rowNumbers = this.availableRightRows;
         }
         
         // リールの位置は通常負の値なので、正の値に変換
@@ -457,37 +598,52 @@ class SlotLogic {
         
         // 中央行のオフセットを考慮した確定インデックス
         const centerOffset = Math.floor(this.visibleRows / 2);
-        const symbolIndex = (topIndex + centerOffset) % parts.length;
+        const symbolIndex = (topIndex + centerOffset) % rowNumbers.length;
         
-        // console.log(`位置→問題文変換 (${reelType}): position=${position}, absPosition=${absPosition}, topIndex=${topIndex}, centerOffset=${centerOffset}, symbolIndex=${symbolIndex}, symbolHeight=${this.symbolHeight}`);
+        const rowNumber = rowNumbers[symbolIndex];
         
-        return parts[symbolIndex].question;
+        console.log(`位置→行番号変換 (${reelType}): position=${position}, absPosition=${absPosition}, topIndex=${topIndex}, centerOffset=${centerOffset}, symbolIndex=${symbolIndex}, rowNumber=${rowNumber}, symbolHeight=${this.symbolHeight}`);
+        
+        return rowNumber;
     }
     
     /**
-     * 現在の問題の完全な問題文を生成
-     * @param {Array} questions - 3つの問題文の配列
-     * @returns {string} 完全な問題文
-     */
-    generateFullQuestion(questions) {
-        return `${questions[0]} ${questions[1]} ${questions[2]}`;
-    }
-    
-    /**
-     * 解答選択肢を生成（要件に準拠：偽回答2個+正解1個）
-     * @returns {Array} 選択肢の配列
+     * 解答選択肢を生成（画像ベース）
+     * @returns {Array} 選択肢の画像パスとBlob URL、正解フラグの配列
      */
     generateAnswerChoices() {
-        if (!this.currentAnswer) {
+        if (!this.currentAnswer || !this.currentAnsRowNumber) {
             console.error('現在の問題が設定されていません');
             return [];
         }
         
+        // 画像パスを生成してBlob URLを取得
+        const correctPath = `${this.ansCorrectPath}${this.currentAnsRowNumber}.png`;
+        const wrong1Path = `${this.ansWrong1Path}${this.currentAnsRowNumber}.png`;
+        const wrong2Path = `${this.ansWrong2Path}${this.currentAnsRowNumber}.png`;
+        
         const choices = [
-            this.currentAnswer.ans,
-            this.currentAnswer.lie_answer1,
-            this.currentAnswer.lie_answer2
+            {
+                imagePath: correctPath,
+                imageUrl: this.getImageUrl(correctPath),
+                isCorrect: true
+            },
+            {
+                imagePath: wrong1Path,
+                imageUrl: this.getImageUrl(wrong1Path),
+                isCorrect: false
+            },
+            {
+                imagePath: wrong2Path,
+                imageUrl: this.getImageUrl(wrong2Path),
+                isCorrect: false
+            }
         ];
+        
+        console.log('生成された選択肢画像パス:');
+        choices.forEach((choice, index) => {
+            console.log(`選択肢${index + 1}: ${choice.imagePath} → ${choice.imageUrl} (正解: ${choice.isCorrect})`);
+        });
         
         // 選択肢をシャッフル
         return this.shuffleArray(choices);
@@ -508,26 +664,38 @@ class SlotLogic {
     }
     
     /**
-     * 解答を判定
-     * @param {string} selectedAnswer - 選択された解答
+     * 解答を判定（画像ベース）
+     * @param {string} selectedImagePath - 選択された解答の画像パス
      * @returns {Object} 判定結果
      */
-    judgeAnswer(selectedAnswer) {
-        if (!this.currentAnswer) {
+    judgeAnswer(selectedImagePath) {
+        if (!this.currentAnswer || !this.currentAnsRowNumber) {
             return {
                 isCorrect: false,
                 message: "問題が選択されていません",
-                correctAnswer: null
+                correctImagePath: null,
+                correctImageUrl: null
             };
         }
         
-        const isCorrect = selectedAnswer === this.currentAnswer.ans;
+        // 正解の画像パスを生成
+        const correctImagePath = `${this.ansCorrectPath}${this.currentAnsRowNumber}.png`;
+        const correctImageUrl = this.getImageUrl(correctImagePath);
+        
+        // 画像パスで判定
+        const isCorrect = selectedImagePath === correctImagePath;
+        
+        console.log('解答判定:');
+        console.log('選択された画像:', selectedImagePath);
+        console.log('正解の画像:', correctImagePath);
+        console.log('判定結果:', isCorrect ? '正解' : '不正解');
         
         return {
             isCorrect: isCorrect,
             message: isCorrect ? "正解です！" : "不正解です",
-            correctAnswer: this.currentAnswer.ans,
-            selectedAnswer: selectedAnswer
+            correctImagePath: correctImagePath,
+            correctImageUrl: correctImageUrl,
+            selectedImagePath: selectedImagePath
         };
     }
     
@@ -564,18 +732,20 @@ class SlotLogic {
     }
     
     /**
-     * デバッグ用：現在の設定を取得
+     * デバッグ用：現在の設定を取得（画像ベース）
      * @returns {Object} 設定情報
      */
     getDebugInfo() {
         return {
             isDataLoaded: this.isDataLoaded,
             isDataReady: this.isDataReady(),
-            que_L: this.que_L,
-            que_C: this.que_C,
-            que_R: this.que_R,
+            availableLeftRows: this.availableLeftRows,
+            availableCenterRows: this.availableCenterRows,
+            availableRightRows: this.availableRightRows,
             ans: this.ans,
             currentAnswer: this.currentAnswer,
+            currentAnsRowNumber: this.currentAnsRowNumber,
+            imageBasePath: this.imageBasePath,
             reelCount: this.reelCount,
             symbolHeight: this.symbolHeight,
             symbolsPerReel: this.symbolsPerReel,

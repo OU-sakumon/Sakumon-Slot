@@ -36,6 +36,8 @@ class SlotUI {
         this.finalPositions = [0, 0, 0];
         this.currentQuestions = [null, null, null]; // 現在の問題文状態
         this.currentQuestionData = null; // 現在の問題データ
+		this.reelStopCompleted = [false, false, false]; // 減速完了フラグ
+		this.hasFinalizedQuestion = false; // finalizeQuestionの一度きり実行制御
         this.score = { totalQuestions: 0, consecutiveCorrect: 0, correctAnswers: 0, maxConsecutive: 0 };
         this.gameTimer = null;
         this.timeLeft = 60; // 60秒
@@ -94,25 +96,29 @@ class SlotUI {
     }
 
     /**
-     * デバッグ表示を更新
-     * @param {Object} questionData - 問題データ（行番号を含む）
+     * デバッグ表示を更新（画像ベース）
+     * @param {Object} questionData - 問題データ（行番号と画像パスを含む）
      */
     updateDebugDisplay(questionData) {
         if (!this.debugRowNumbers || !questionData) {
+            this.debugRowNumbers.innerHTML = '<div>行番号: 未選択</div>';
             return;
         }
 
         const answerData = questionData.answer;
         if (answerData) {
             this.debugRowNumbers.innerHTML = `
-                <div>左リール行番号: ${answerData.row_L}</div>
-                <div>中央リール行番号: ${answerData.row_C}</div>
-                <div>右リール行番号: ${answerData.row_R}</div>
-                <div style="margin-top: 10px; font-size: 12px; color: #ccc;">
-                    問題文:<br>
-                    左: ${questionData.left.question}<br>
-                    中央: ${questionData.center.question}<br>
-                    右: ${questionData.right.question}
+                <div>Ans行番号: ${questionData.ansRowNumber}</div>
+                <div style="margin-top: 10px; border-top: 1px solid #666; padding-top: 10px;">
+                    <div>左リール: ${answerData.row_L}</div>
+                    <div>中央リール: ${answerData.row_C}</div>
+                    <div>右リール: ${answerData.row_R}</div>
+                </div>
+                <div style="margin-top: 10px; font-size: 11px; color: #999;">
+                    画像パス:<br>
+                    左: ${questionData.left.imagePath}<br>
+                    中央: ${questionData.center.imagePath}<br>
+                    右: ${questionData.right.imagePath}
                 </div>
             `;
         } else {
@@ -141,7 +147,7 @@ class SlotUI {
     }
     
     /**
-     * 指定されたリールを更新
+     * 指定されたリールを更新（画像ベース）
      * @param {number} reelIndex - リールのインデックス
      * @param {string} reelType - リールの種類
      */
@@ -151,12 +157,22 @@ class SlotUI {
         // 既存のシンボルをクリア
         reel.innerHTML = '';
         
-        // ロジック層から現在のシンボル配列を取得して動的生成
+        // ロジック層から現在のシンボル配列を取得して動的生成（画像URL）
         const reelSymbols = this.logic.generateReelSymbols(reelType);
-        reelSymbols.forEach(symbol => {
+        reelSymbols.forEach(symbolData => {
             const symbolElement = document.createElement('div');
             symbolElement.className = 'slot-symbol';
-            symbolElement.textContent = symbol;
+            symbolElement.dataset.rowNumber = symbolData.rowNumber; // 行番号をdata属性に保存
+            
+            // 画像要素を作成
+            const img = document.createElement('img');
+            img.src = symbolData.imageUrl; // Blob URLを使用
+            img.alt = `Row ${symbolData.rowNumber}`;
+            img.style.width = '100%';
+            img.style.height = '100%';
+            img.style.objectFit = 'contain';
+            
+            symbolElement.appendChild(img);
             reel.appendChild(symbolElement);
         });
     }
@@ -253,6 +269,9 @@ class SlotUI {
         
         // デバッグ表示をリセット
         this.updateDebugDisplay(null);
+        
+        // 選択肢の枠を表示（中身は全停止まで非表示）
+        this.initializeAnswerChoices();
         
         // スタートボタンを無効化、中断ボタンとスコア表示を表示
         this.startButton.disabled = true;
@@ -406,9 +425,11 @@ class SlotUI {
         // デバッグ表示を更新
         this.updateDebugDisplay(this.currentQuestionData);
 
-        // UI状態の更新
-        this.answerChoices.style.visibility = 'hidden';
+        // UI状態の更新（選択肢の枠は表示、中身は全停止まで非表示）
+        this.initializeAnswerChoices();
         this.currentQuestions = [null, null, null]; // 問題文状態リセット
+        this.reelStopCompleted = [false, false, false]; // 停止完了フラグをリセット
+        this.hasFinalizedQuestion = false; // 選択肢表示フラグをリセット
         
         // スタート音（slot_start.wav）
         this.audio.playStartSound();
@@ -434,20 +455,16 @@ class SlotUI {
     }
     
     /**
-     * 強調表示をリセット
+     * 強調表示をリセット（画像ベース）
      */
     resetHighlights() {
         this.reels.forEach((reel) => {
             const symbols = reel.querySelectorAll('.slot-symbol');
             symbols.forEach(symbol => {
-                symbol.style.color = '#ffd700';
-                symbol.style.fontSize = '16px';
-                symbol.style.fontWeight = 'bold';
                 symbol.style.borderTop = '';
                 symbol.style.borderBottom = '';
-                symbol.style.webkitTextStroke = '';
-                symbol.style.textShadow = '1px 1px 2px rgba(0, 0, 0, 0.8)';
                 symbol.style.background = '';
+                symbol.style.boxShadow = '';
             });
         });
     }
@@ -470,6 +487,7 @@ class SlotUI {
                 if (position <= -fullCycle) {
                     position += fullCycle; // 位置をリセット（0に戻すのではなく、1周分を引く）
                 }
+                // リール全体を一つのユニットとして回転させる
                 reel.style.transform = `translateY(${position}px)`;
             }
         }, interval);
@@ -483,6 +501,7 @@ class SlotUI {
     stopReel(reelIndex) {
         if (!this.isSpinning[reelIndex]) return;
         
+        console.log(`リール${reelIndex + 1}の停止を開始`);
         
         // 回転状態の更新
         this.isSpinning[reelIndex] = false;
@@ -492,7 +511,7 @@ class SlotUI {
     }
     
     /**
-     * リールの減速停止アニメーション
+     * リールの減速停止アニメーション（画像ベース）
      * @param {number} reelIndex - リールのインデックス
      */
     slowDownReel(reelIndex) {
@@ -506,14 +525,14 @@ class SlotUI {
         const reelTypes = ['left', 'center', 'right'];
         const reelType = reelTypes[reelIndex];
         
-        // 現在の問題データから適切な問題文を選択
-        let targetQuestion = null;
-        if (reelIndex === 0) targetQuestion = this.currentQuestionData.left.question;
-        else if (reelIndex === 1) targetQuestion = this.currentQuestionData.center.question;
-        else if (reelIndex === 2) targetQuestion = this.currentQuestionData.right.question;
+        // 現在の問題データから適切な行番号を選択
+        let targetRowNumber = null;
+        if (reelIndex === 0) targetRowNumber = this.currentQuestionData.left.rowNumber;
+        else if (reelIndex === 1) targetRowNumber = this.currentQuestionData.center.rowNumber;
+        else if (reelIndex === 2) targetRowNumber = this.currentQuestionData.right.rowNumber;
         
-        console.log(`リール${reelIndex + 1}の目標問題文: ${targetQuestion}`);
-        const finalPosition = this.logic.getPositionForQuestion(targetQuestion, reelType);
+        console.log(`リール${reelIndex + 1}の目標行番号: ${targetRowNumber}`);
+        const finalPosition = this.logic.getPositionForQuestion(targetRowNumber, reelType);
         this.finalPositions[reelIndex] = finalPosition;
         console.log(`リール${reelIndex + 1}の最終位置: ${finalPosition}px (symbolHeight: ${this.logic.symbolHeight}px, visibleRows: ${this.logic.visibleRows})`);
         
@@ -530,21 +549,24 @@ class SlotUI {
             previousPosition = currentPosition;
             currentPosition = newPosition;
             
-            // 位置をピクセル単位で正確に設定（小数点以下を適切に処理）
-            const roundedPosition = Math.round(currentPosition * 100) / 100;
+            // 位置をピクセル単位で正確に設定（整数ピクセルにスナップ）
+            const roundedPosition = Math.round(currentPosition);
             reel.style.transform = `translateY(${roundedPosition}px)`;
             
             // 回転速度が一定以下になったら強制停止（速度のみをトリガーに）
             // より厳格な停止条件で、ピッタリ真ん中に停止
             if (velocity <= 0.1 || Math.abs(distance) < 0.5) {
-                // 最終位置に正確に固定（ピッタリに）
-                reel.style.transform = `translateY(${finalPosition}px)`;
+                // 最終位置に正確に固定（整数ピクセルにスナップ）
+                const snappedFinal = Math.round(finalPosition);
+                reel.style.transform = `translateY(${snappedFinal}px)`;
                 
-                // 停止位置から問題文を計算して記録
-                const stoppedQuestion = this.logic.getQuestionFromPosition(finalPosition, reelType);
-                this.currentQuestions[reelIndex] = stoppedQuestion;
+                // 停止位置から行番号を計算して記録
+                const stoppedRowNumber = this.logic.getQuestionFromPosition(snappedFinal, reelType);
+                this.currentQuestions[reelIndex] = stoppedRowNumber;
+                this.reelStopCompleted[reelIndex] = true;
                 
-                console.log(`リール${reelIndex + 1}停止完了: 位置=${finalPosition}px（ピッタリ）, 問題文="${stoppedQuestion}"`);
+                console.log(`リール${reelIndex + 1}停止完了: 位置=${finalPosition}px（ピッタリ）, 行番号=${stoppedRowNumber}`);
+                console.log(`現在のリール状態: [${this.isSpinning.map(s => s ? '回転中' : '停止').join(', ')}]`);
                 
                 // 停止音を再生
                 if (!soundPlayed) {
@@ -553,8 +575,9 @@ class SlotUI {
                 }
                 
                 // このリールだけを強調表示
-                this.highlightSingleReel(reelIndex, targetQuestion);
+                this.highlightSingleReel(reelIndex, targetRowNumber);
                 
+                // 全てのリールが停止したかチェック
                 this.checkGameComplete();
             } else {
                 requestAnimationFrame(stopAnimation);
@@ -601,11 +624,12 @@ class SlotUI {
                 }
             }
             
-            // 平均symbolHeightを計算
+            // 平均symbolHeightを計算（整数化してズレを防止）
             if (count > 0) {
                 const avgSymbolHeight = totalHeight / count;
-                this.logic.symbolHeight = avgSymbolHeight;
-                console.log(`symbolHeight更新: ${avgSymbolHeight}px (${count}リールから計算)`);
+                const snappedHeight = Math.round(avgSymbolHeight);
+                this.logic.symbolHeight = snappedHeight;
+                console.log(`symbolHeight更新: ${snappedHeight}px (${count}リールから計算, 元: ${avgSymbolHeight})`);
             }
             
             // visibleRowsを計算（最初のリールのカラム要素から）
@@ -628,21 +652,29 @@ class SlotUI {
      * ゲーム完了チェック
      */
     checkGameComplete() {
-        const allStopped = this.isSpinning.every(spinning => !spinning);
+        // 2個目のリールが停止した段階で選択肢を表示
+        const stoppedCount = this.reelStopCompleted.filter(done => done).length;
         
-        if (allStopped) {
+        console.log('ゲーム完了チェック:', {
+            isSpinning: this.isSpinning,
+            reelStopCompleted: this.reelStopCompleted,
+            stoppedCount: stoppedCount
+        });
+        
+        // 2個目のリールが停止した時点で選択肢を表示
+        if (stoppedCount >= 2 && !this.hasFinalizedQuestion) {
+            this.hasFinalizedQuestion = true;
             // 問題を確定してから選択肢を表示
             this.finalizeQuestion();
         }
     }
     
     /**
-     * 問題を確定して選択肢を表示
+     * 問題を確定して選択肢を表示（画像ベース）
      */
     finalizeQuestion() {
-        // 問題を確定（現在の問題データを確定）
-        const fullQuestion = this.logic.generateFullQuestion(this.currentQuestions);
-        console.log('確定した問題:', fullQuestion);
+        // 問題を確定（行番号を記録）
+        console.log('確定した問題（行番号）:', this.currentQuestions);
         
         // 全てのリールはすでに個別に強調表示されているので、ここでは何もしない
         
@@ -651,76 +683,69 @@ class SlotUI {
     }
     
     /**
-     * 単一のリールを強調表示
+     * 単一のリールを強調表示（画像ベース）
      * @param {number} reelIndex - リールのインデックス
-     * @param {string} targetQuestion - 目標問題文
+     * @param {number} targetRowNumber - 目標行番号
      */
-    highlightSingleReel(reelIndex, targetQuestion) {
+    highlightSingleReel(reelIndex, targetRowNumber) {
         const reel = this.reels[reelIndex];
         const symbols = reel.querySelectorAll('.slot-symbol');
         
         symbols.forEach(symbol => {
-            // 目標の問題文に一致する場合、強調表示
-            if (symbol.textContent === targetQuestion) {
-                symbol.style.color = '#ff0000'; // 赤色
-                symbol.style.fontSize = '20px'; // 大きい文字
-                symbol.style.fontWeight = 'bold'; // bold
-                symbol.style.webkitTextStroke = '0.8px #ffd700'; // 文字の縁を金色（細く）
-                symbol.style.textShadow = '2px 2px 4px rgba(0, 0, 0, 0.9), 0 0 10px rgba(255, 215, 0, 0.6)'; // 影を強調
-                symbol.style.borderTop = '3px solid #ffd700'; // 上の区切りを金色
-                symbol.style.borderBottom = '3px solid #ffd700'; // 下の区切りを金色
-                symbol.style.background = 'rgba(255, 215, 0, 0.1)'; // 背景を少し明るく
-                console.log(`リール${reelIndex + 1}: 問題文 "${targetQuestion}" を強調表示しました`);
+            const rowNumber = parseInt(symbol.dataset.rowNumber);
+            // 目標の行番号に一致する場合、強調表示
+            if (rowNumber === targetRowNumber) {
+                symbol.style.borderTop = '';
+                symbol.style.borderBottom = '';
+                symbol.style.background = 'rgba(255, 215, 0, 0.2)';
+                // 内側のラインで強調（レイアウトを変えず、はみ出し防止）
+                symbol.style.boxShadow = 'inset 0 5px 0 #ffd700, inset 0 -5px 0 #ffd700, 0 0 20px rgba(255, 215, 0, 0.8)';
+                console.log(`リール${reelIndex + 1}: 行番号 ${targetRowNumber} を強調表示しました`);
             }
         });
     }
     
+    
+    
+    
     /**
-     * 停止した問題文を強調表示（全リール対象・旧バージョン）
+     * 選択肢の初期化（無効状態で表示）
      */
-    highlightSelectedQuestions() {
-        // 各リールで、目標の問題文を強調表示
-        const targetQuestions = [
-            this.currentQuestionData.left.question,
-            this.currentQuestionData.center.question,
-            this.currentQuestionData.right.question
-        ];
+    initializeAnswerChoices() {
+        // 選択肢の枠を表示（中身は全停止まで非表示）
+        this.answerChoices.innerHTML = '';
         
-        this.reels.forEach((reel, reelIndex) => {
-            const symbols = reel.querySelectorAll('.slot-symbol');
-            const targetQuestion = targetQuestions[reelIndex];
+        for (let i = 0; i < 3; i++) {
+            const button = document.createElement('button');
+            button.className = 'answer-choice disabled';
+            button.disabled = true;
+            button.style.background = '#666666';
+            button.style.cursor = 'not-allowed';
+            button.style.opacity = '0.6';
+            button.style.width = '250px';
+            button.style.height = '150px';
             
-            symbols.forEach(symbol => {
-                // 既存の強調スタイルをリセット
-                symbol.style.color = '#ffd700';
-                symbol.style.fontSize = '16px';
-                symbol.style.fontWeight = 'bold';
-                symbol.style.borderTop = '';
-                symbol.style.borderBottom = '';
-                symbol.style.webkitTextStroke = '';
-                symbol.style.textShadow = '1px 1px 2px rgba(0, 0, 0, 0.8)';
-                symbol.style.background = '';
-                
-                // 目標の問題文に一致する場合、強調表示
-                if (symbol.textContent === targetQuestion) {
-                    symbol.style.color = '#ff0000'; // 赤色
-                    symbol.style.fontSize = '20px'; // 大きい文字
-                    symbol.style.fontWeight = 'bold'; // bold
-                    symbol.style.webkitTextStroke = '0.8px #ffd700'; // 文字の縁を金色（細く）
-                    symbol.style.textShadow = '2px 2px 4px rgba(0, 0, 0, 0.9), 0 0 10px rgba(255, 215, 0, 0.6)'; // 影を強調
-                    symbol.style.borderTop = '3px solid #ffd700'; // 上の区切りを金色
-                    symbol.style.borderBottom = '3px solid #ffd700'; // 下の区切りを金色
-                    symbol.style.background = 'rgba(255, 215, 0, 0.1)'; // 背景を少し明るく
-                    console.log(`リール${reelIndex + 1}: 問題文 "${targetQuestion}" を強調表示しました`);
-                }
-            });
-        });
+            // プレースホルダー画像またはテキストを表示
+            const placeholder = document.createElement('div');
+            placeholder.style.width = '100%';
+            placeholder.style.height = '100%';
+            placeholder.style.display = 'flex';
+            placeholder.style.alignItems = 'center';
+            placeholder.style.justifyContent = 'center';
+            placeholder.style.color = '#999';
+            placeholder.style.fontSize = '14px';
+            placeholder.textContent = '選択肢 ' + (i + 1);
+            
+            button.appendChild(placeholder);
+            this.answerChoices.appendChild(button);
+        }
+        
+        // 選択肢の枠を表示
+        this.answerChoices.style.visibility = 'visible';
     }
-    
-    
-    
+
     /**
-     * 解答選択肢の表示
+     * 解答選択肢の表示（画像ベース）
      */
     displayAnswerChoices() {
         // 現在の問題データが確定しているかチェック
@@ -729,44 +754,53 @@ class SlotUI {
             return;
         }
         
-        // 表示中の更新を防ぐため、既に表示されている場合は何もしない
-        if (this.answerChoices.style.visibility === 'visible') {
-            console.log('選択肢は既に表示中です。更新をスキップします。');
-            return;
-        }
-        
         const choices = this.logic.generateAnswerChoices();
         
-        // 非表示中にテキスト更新を実行
+        // 選択肢を完全に再生成
         this.answerChoices.innerHTML = '';
         
-        // 選択肢ボタンを生成（非表示中に実行）
-        choices.forEach((choice, index) => {
+        // 選択肢ボタンを生成（画像として表示）
+        choices.forEach((choiceData, index) => {
             const button = document.createElement('button');
             button.className = 'answer-choice';
-            button.textContent = choice;
+            button.dataset.imagePath = choiceData.imagePath; // 画像パスをdata属性に保存
+            button.dataset.isCorrect = choiceData.isCorrect; // 正解フラグをdata属性に保存
+            button.style.width = '250px';
+            button.style.height = '150px';
+            
+            // 画像要素を作成
+            const img = document.createElement('img');
+            img.src = choiceData.imageUrl; // Blob URLを使用
+            img.alt = `選択肢 ${index + 1}`;
+            img.style.width = '100%';
+            img.style.height = '100%';
+            img.style.objectFit = 'cover';
+            img.style.objectPosition = 'center';
+            
+            button.appendChild(img);
+            
             button.addEventListener('click', () => {
                 this.audio.playButtonPushedSound();
-                this.selectAnswer(choice);
+                this.selectAnswer(choiceData.imagePath);
             });
             this.answerChoices.appendChild(button);
         });
         
-        // 問題が確定したら即座に選択肢を表示
+        // 選択肢を表示
         this.answerChoices.style.visibility = 'visible';
         
-        console.log('選択肢を表示:', choices);
+        console.log('選択肢（画像）を表示:', choices);
     }
     
     /**
-     * 解答の選択
-     * @param {string} selectedAnswer - 選択された解答
+     * 解答の選択（画像ベース）
+     * @param {string} selectedImagePath - 選択された解答の画像パス
      */
-    selectAnswer(selectedAnswer) {
+    selectAnswer(selectedImagePath) {
         // 選択肢を即座に非表示（押されたらすぐに非表示）
         this.answerChoices.style.visibility = 'hidden';
         
-        const result = this.logic.judgeAnswer(selectedAnswer);
+        const result = this.logic.judgeAnswer(selectedImagePath);
         
         // スコア更新
         this.score.totalQuestions++;
@@ -789,12 +823,13 @@ class SlotUI {
         
         // 結果表示は削除済み
         
-        // 選択肢の色を変更（非表示中に実行）
+        // 選択肢の色を変更（非表示中に実行、画像パスで判定）
         const choiceButtons = this.answerChoices.querySelectorAll('.answer-choice');
         choiceButtons.forEach(button => {
-            if (button.textContent === result.correctAnswer) {
+            const imagePath = button.dataset.imagePath;
+            if (imagePath === result.correctImagePath) {
                 button.classList.add('correct');
-            } else if (button.textContent === selectedAnswer && !result.isCorrect) {
+            } else if (imagePath === selectedImagePath && !result.isCorrect) {
                 button.classList.add('incorrect');
             }
             button.disabled = true;
