@@ -3,6 +3,9 @@
 ## 概要
 
 阪大作問サークルが開発した、パーツを組み合わせてできた問題を解答するスロットマシンゲームです。
+プレイするには、問題ファイルを作成する必要があります。
+作成方法については`docs/マニュアル.md`をご覧ください。
+問題ファイルのサンプルとして、`サンプル問題.zip`を準備しています。これをアップロードすると、サンプル問題でプレイができます。
 
 ## 特徴
 
@@ -17,9 +20,9 @@
 
 リポジトリをクローンまたはダウンロード、Webサイトからプレイ
 
-**スロットゲーム**: https://ou-sakumon.github.io/Sakumon-Slot/ローンチ/index.html
+**スロットゲーム**: https://ou-sakumon.github.io/Sakumon-Slot/launch/index.html
 
-**問題生成ツール**: https://ou-sakumon.github.io/Sakumon-Slot/開発/make_anssheet/index.html
+**問題生成ツール**: https://ou-sakumon.github.io/Sakumon-Slot/dev/make_anssheet/index.html
 
 
 ## 使用方法
@@ -35,13 +38,7 @@
 
 3. **プレイ**: 
    - 「スタート」ボタンを押してゲーム開始
-   - 1分間でできるだけ多くの問題を解答
-
-詳細は`docs/imageフォルダのルール.md`をご覧ください。
-
-## 各種設定
-
-問題の設定、スロットの設定などは`docs/マニュアル.md`をご覧ください。
+   -  ランキングで競う。
 
 ## 権利について
 

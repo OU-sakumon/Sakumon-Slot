@@ -21,16 +21,39 @@ class SlotRanking {
     loadRankings() {
         try {
             const storedData = localStorage.getItem(this.rankingKey);
+            console.log('ローカルストレージから取得したデータ:', storedData);
+            
             if (storedData) {
                 const parsedData = JSON.parse(storedData);
+                
+                // データの整合性をチェック
+                if (parsedData && typeof parsedData === 'object') {
+                    this.rankings = {
+                        correctAnswers: Array.isArray(parsedData.correctAnswers) ? parsedData.correctAnswers : [],
+                        consecutiveAnswers: Array.isArray(parsedData.consecutiveAnswers) ? parsedData.consecutiveAnswers : []
+                    };
+                    console.log('ランキングデータを読み込みました:', this.rankings);
+                } else {
+                    console.warn('無効なランキングデータ形式です。デフォルト値を使用します。');
+                    this.rankings = {
+                        correctAnswers: [],
+                        consecutiveAnswers: []
+                    };
+                }
+            } else {
+                console.log('ローカルストレージにランキングデータがありません。デフォルト値を使用します。');
                 this.rankings = {
-                    correctAnswers: parsedData.correctAnswers || [],
-                    consecutiveAnswers: parsedData.consecutiveAnswers || []
+                    correctAnswers: [],
+                    consecutiveAnswers: []
                 };
-                console.log('ランキングデータを読み込みました');
             }
         } catch (error) {
             console.error('ランキングデータの読み込みに失敗:', error);
+            // エラー時はデフォルト値を使用
+            this.rankings = {
+                correctAnswers: [],
+                consecutiveAnswers: []
+            };
         }
     }
     
@@ -39,7 +62,11 @@ class SlotRanking {
      */
     saveRankings() {
         try {
-            localStorage.setItem(this.rankingKey, JSON.stringify(this.rankings));
+            const dataToSave = JSON.stringify(this.rankings);
+            console.log('保存するランキングデータ:', this.rankings);
+            console.log('保存するJSONデータ:', dataToSave);
+            
+            localStorage.setItem(this.rankingKey, dataToSave);
             console.log('ランキングデータを保存しました');
         } catch (error) {
             console.error('ランキングデータの保存に失敗:', error);
@@ -163,16 +190,39 @@ class SlotRanking {
     }
     
     /**
+     * 最新のランキングデータを強制読み込み
+     */
+    refreshRankings() {
+        console.log('ランキングデータを最新状態に更新中...');
+        this.loadRankings();
+        console.log('更新後のランキングデータ:', this.rankings);
+    }
+
+    /**
      * ランキングデータをエクスポート
      */
     exportRankings() {
         try {
+            // エクスポート前に最新データを強制読み込み
+            this.refreshRankings();
+            
+            // デバッグ用：現在のランキングデータをコンソールに出力
+            console.log('エクスポート対象のランキングデータ:', this.rankings);
+            
             const exportData = {
                 version: '1.0',
                 timestamp: new Date().toISOString(),
-                rankings: this.rankings
+                rankings: this.rankings,
+                statistics: {
+                    correctAnswersCount: this.rankings.correctAnswers.length,
+                    consecutiveAnswersCount: this.rankings.consecutiveAnswers.length
+                }
             };
-            return JSON.stringify(exportData, null, 2);
+            
+            const jsonString = JSON.stringify(exportData, null, 2);
+            console.log('エクスポート用JSONデータ:', jsonString);
+            
+            return jsonString;
         } catch (error) {
             console.error('エクスポートに失敗:', error);
             return null;

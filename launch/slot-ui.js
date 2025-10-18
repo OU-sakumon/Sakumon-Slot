@@ -1507,6 +1507,9 @@ class SlotUI {
         const correctAnswersRanking = document.getElementById('correctAnswersRanking');
         const consecutiveAnswersRanking = document.getElementById('consecutiveAnswersRanking');
         
+        // 表示前に最新データを強制読み込み
+        this.ranking.refreshRankings();
+        
         // ランキングデータを表示
         this.displayRanking(correctAnswersRanking, this.ranking.getCorrectAnswersRanking(), 'correctAnswers');
         this.displayRanking(consecutiveAnswersRanking, this.ranking.getConsecutiveAnswersRanking(), 'consecutiveAnswers');
@@ -1569,9 +1572,26 @@ class SlotUI {
     /**
      * ランキングデータをエクスポート
      */
-    async exportRankings() {
+    exportRankings() {
         try {
-            const exportData = await this.ranking.exportRankings();
+            console.log('ランキングエクスポート開始');
+            
+            // エクスポート前に最新データを強制読み込み
+            this.ranking.refreshRankings();
+            
+            // ランキングデータの存在確認（最新データで再確認）
+            const correctAnswers = this.ranking.getCorrectAnswersRanking();
+            const consecutiveAnswers = this.ranking.getConsecutiveAnswersRanking();
+            
+            console.log(`正解数ランキング: ${correctAnswers.length}件`);
+            console.log(`連続正解数ランキング: ${consecutiveAnswers.length}件`);
+            
+            if (correctAnswers.length === 0 && consecutiveAnswers.length === 0) {
+                alert('エクスポートするランキングデータがありません。\nまずゲームをプレイしてランキングデータを作成してください。');
+                return;
+            }
+            
+            const exportData = this.ranking.exportRankings();
             if (exportData) {
                 // ファイル名を生成
                 const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -1590,13 +1610,14 @@ class SlotUI {
                 document.body.removeChild(link);
                 URL.revokeObjectURL(url);
                 
-                alert('ランキングデータをエクスポートしました。');
+                alert(`ランキングデータをエクスポートしました。\n正解数ランキング: ${correctAnswers.length}件\n連続正解数ランキング: ${consecutiveAnswers.length}件\n\nファイル名: ${filename}`);
+                console.log('ランキングエクスポート完了');
             } else {
-                alert('エクスポートに失敗しました。');
+                alert('エクスポートに失敗しました。データの処理中にエラーが発生しました。');
             }
         } catch (error) {
             console.error('エクスポートエラー:', error);
-            alert('エクスポートに失敗しました。');
+            alert(`エクスポートに失敗しました。\nエラー: ${error.message}`);
         }
     }
     
@@ -1613,10 +1634,10 @@ class SlotUI {
                 const file = event.target.files[0];
                 if (file) {
                     const reader = new FileReader();
-                    reader.onload = async (e) => {
+                    reader.onload = (e) => {
                         try {
                             const jsonData = e.target.result;
-                            if (await this.ranking.importRankings(jsonData)) {
+                            if (this.ranking.importRankings(jsonData)) {
                                 alert('ランキングデータをインポートしました。');
                                 // ランキング表示を更新
                                 this.showRankings();

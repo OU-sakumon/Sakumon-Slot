@@ -133,6 +133,12 @@ config.local.json
 slot_stop.mp3
 *.png
 *.json
+template
+input
+output
+__pycache__
+test.py
 
-# 共有可能なファイル
+# 公開情報
 !スロット-テンプレ.xlsx
+!サンプル問題.zip
