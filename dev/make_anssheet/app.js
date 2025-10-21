@@ -18,6 +18,9 @@ class SlotProblemGenerator {
             this.handleFileSelect(e);
         });
 
+        // ドラッグアンドドロップ
+        this.initializeDragAndDrop();
+
         // 検証ボタン
         document.getElementById('validateBtn').addEventListener('click', () => {
             this.validateWorkbook();
@@ -49,11 +52,61 @@ class SlotProblemGenerator {
         });
     }
 
-    handleFileSelect(event) {
-        const file = event.target.files[0];
-        if (!file) return;
+    initializeDragAndDrop() {
+        const dropZone = document.getElementById('dropZone');
+        
+        // ドラッグオーバー時の処理
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.add('drag-over');
+        });
 
-        console.log('ファイルが選択されました:', file.name);
+        // ドラッグリーブ時の処理
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.remove('drag-over');
+        });
+
+        // ドロップ時の処理
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.remove('drag-over');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                const file = files[0];
+                // ファイルタイプをチェック
+                if (this.isValidExcelFile(file)) {
+                    this.processFile(file);
+                } else {
+                    this.updateStepStatus(1, 'error', 'Excelファイル（.xlsx, .xls）を選択してください');
+                }
+            }
+        });
+
+        // クリック時の処理（ファイル選択ダイアログを開く）
+        dropZone.addEventListener('click', () => {
+            document.getElementById('excelFile').click();
+        });
+    }
+
+    isValidExcelFile(file) {
+        const validTypes = [
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+            'application/vnd.ms-excel' // .xls
+        ];
+        const validExtensions = ['.xlsx', '.xls'];
+        const fileName = file.name.toLowerCase();
+        
+        return validTypes.includes(file.type) || 
+               validExtensions.some(ext => fileName.endsWith(ext));
+    }
+
+    processFile(file) {
+        console.log('ファイルが処理されました:', file.name);
 
         // ファイル情報を表示
         const fileInfo = document.getElementById('fileInfo');
@@ -91,6 +144,18 @@ class SlotProblemGenerator {
         };
         
         reader.readAsArrayBuffer(file);
+    }
+
+    handleFileSelect(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        // ファイルタイプをチェック
+        if (this.isValidExcelFile(file)) {
+            this.processFile(file);
+        } else {
+            this.updateStepStatus(1, 'error', 'Excelファイル（.xlsx, .xls）を選択してください');
+        }
     }
 
     validateWorkbook() {
@@ -355,9 +420,9 @@ class SlotProblemGenerator {
                             problems.push(problem);
                             
                             // AnsシートにA, B, C, I列を書き込み
-                            this.setCellValue(ansSheet, `A${ansRow}`, i + 2); // row_L
-                            this.setCellValue(ansSheet, `B${ansRow}`, j + 2); // row_C
-                            this.setCellValue(ansSheet, `C${ansRow}`, k + 2); // row_R
+                            this.setCellValue(ansSheet, `A${ansRow}`, String(i + 2)); // row_L
+                            this.setCellValue(ansSheet, `B${ansRow}`, String(j + 2)); // row_C
+                            this.setCellValue(ansSheet, `C${ansRow}`, String(k + 2)); // row_R
                             this.setCellValue(ansSheet, `I${ansRow}`, problem.question); // 問題文
                             
                             console.log(`Ansシートの${ansRow}行目に問題を追加:`, {
@@ -460,18 +525,16 @@ class SlotProblemGenerator {
     }
 
     importAnswers() {
-        const jsonInput = document.getElementById('jsonInput').value.trim();
+        const jsonInput = document.getElementById('jsonInput');
+        const jsonText = jsonInput.value.trim();
         
-        console.log('インポート処理を開始...');
-        console.log('入力されたJSON:', jsonInput.substring(0, 100) + '...');
-        
-        if (!jsonInput) {
+        if (!jsonText) {
             this.updateStepStatus(4, 'error', 'JSONデータが入力されていません');
             return;
         }
 
         try {
-            const answers = JSON.parse(jsonInput);
+            const answers = JSON.parse(jsonText);
             
             // JSONの形式を判定して適切に処理
             if (Array.isArray(answers)) {
@@ -492,9 +555,6 @@ class SlotProblemGenerator {
                 this.answersData = [answers];
             }
             
-            console.log('解答データのインポートが完了:', this.answersData.length);
-            console.log('解答データの詳細:', this.answersData);
-            
             // 解答データの形式をチェック
             const validAnswers = this.answersData.filter(answer => answer.D);
             if (validAnswers.length === 0) {
@@ -502,8 +562,14 @@ class SlotProblemGenerator {
                 return;
             }
             
-            this.updateStepStatus(4, 'success', `解答データのインポートが完了しました（${validAnswers.length}件）`);
-            this.enableStep(5);
+            // 解答データをワークブックに書き込み
+            try {
+                this.addAnswersToWorkbook();
+                this.updateStepStatus(4, 'success', `解答データのインポートと書き込みが完了しました（${validAnswers.length}件）`);
+                this.enableStep(5);
+            } catch (error) {
+                this.updateStepStatus(4, 'error', `解答データの書き込みに失敗しました: ${error.message}`);
+            }
             
         } catch (error) {
             console.error('JSON解析エラー:', error);
@@ -512,27 +578,20 @@ class SlotProblemGenerator {
     }
 
     downloadFinalFile() {
-        if (!this.workbook || this.answersData.length === 0) {
-            this.updateStepStatus(5, 'error', '必要なデータが不足しています');
+        if (!this.workbook) {
+            this.updateStepStatus(5, 'error', 'ワークブックが読み込まれていません');
+            return;
+        }
+
+        if (this.answersData.length === 0) {
+            this.updateStepStatus(5, 'error', '解答データがありません。先に「解答をインポート」を実行してください。');
             return;
         }
 
         try {
-            console.log('最終ファイルの生成を開始...');
-            console.log('元のワークブックのシート:', Object.keys(this.workbook.Sheets));
-            
-            // Ansシートに解答を追加
-            this.addAnswersToWorkbook();
-            
-            // 元のワークブックを直接使用してダウンロード
-            // 新しいワークブックを作成せず、元のワークブックをそのまま使用
             XLSX.writeFile(this.workbook, 'スロット.xlsx');
-            
-            console.log('スロット.xlsxの生成が完了しました');
             this.updateStepStatus(5, 'success', 'スロット.xlsxの生成が完了しました');
-            
         } catch (error) {
-            console.error('ファイル生成エラー:', error);
             this.updateStepStatus(5, 'error', `ファイルの生成に失敗しました: ${error.message}`);
         }
     }
@@ -540,12 +599,10 @@ class SlotProblemGenerator {
     addAnswersToWorkbook() {
         const ansSheet = this.workbook.Sheets['Ans'];
         if (!ansSheet) {
-            console.error('Ansシートが見つかりません');
             throw new Error('Ansシートが見つかりません');
         }
         
-        // 既存のAnsシートのデータを確認（A, B, C列のデータがある行を確認）
-        console.log('既存のAnsシートのデータを確認中...');
+        // 既存のAnsシートのデータを確認
         let existingRowCount = 0;
         let row = 2;
         while (true) {
@@ -557,23 +614,53 @@ class SlotProblemGenerator {
             existingRowCount++;
             row++;
         }
-        console.log(`既存のAnsシートデータ: ${existingRowCount}行`);
         
-        // 解答データを既存の行に追加（D, E, F, G列のみ）
-        let answerIndex = 0;
-        for (let row = 2; row < 2 + existingRowCount && answerIndex < this.answersData.length; row++) {
-            const answer = this.answersData[answerIndex];
-            if (answer && answer.D) {
-                console.log(`行${row}に解答${answerIndex + 1}を追加:`, answer);
-                this.setCellValue(ansSheet, `D${row}`, answer.D);
-                this.setCellValue(ansSheet, `E${row}`, answer.E || '');
-                this.setCellValue(ansSheet, `F${row}`, answer.F || '');
-                this.setCellValue(ansSheet, `G${row}`, answer.G || '');
-                answerIndex++;
+        let matchedCount = 0;
+        
+        // 注意: A,B,C列は問題生成時（txt生成時）に既に設定されている
+        // ここでは、既存のA,B,C列の値と一致する行にのみD,E,F,G列を入力する
+        
+        // 各解答データについて、A,B,C列の値が一致する行を探す
+        for (const answer of this.answersData) {
+            if (!answer || !answer.A || !answer.B || !answer.C) {
+                continue;
+            }
+            
+            // Ansシートの全行を検索してマッチする行を見つける
+            let found = false;
+            let searchRow = 2; // ヘッダー行をスキップ
+            
+            while (true) {
+                const aValue = this.getCellValue(ansSheet, `A${searchRow}`);
+                const bValue = this.getCellValue(ansSheet, `B${searchRow}`);
+                const cValue = this.getCellValue(ansSheet, `C${searchRow}`);
+                
+                // 行の終端に達した場合
+                if (!aValue || !bValue || !cValue) break;
+                
+                // 既存のA,B,C列の値とJSONデータのA,B,C列の値が一致するかチェック
+                if (parseInt(aValue) === parseInt(answer.A) &&
+                    parseInt(bValue) === parseInt(answer.B) &&
+                    parseInt(cValue) === parseInt(answer.C)) {
+                    
+                    // D,E,F,G列にのみ値を設定（A,B,C列は変更しない）
+                    this.setCellValue(ansSheet, `D${searchRow}`, answer.D || '');
+                    this.setCellValue(ansSheet, `E${searchRow}`, answer.E || '');
+                    this.setCellValue(ansSheet, `F${searchRow}`, answer.F || '');
+                    this.setCellValue(ansSheet, `G${searchRow}`, answer.G || '');
+                    
+                    matchedCount++;
+                    found = true;
+                    break;
+                }
+                
+                searchRow++;
             }
         }
         
-        console.log(`解答の追加が完了しました（${answerIndex}件）`);
+        // ワークブックの範囲を更新（重要：これがないと変更が反映されない）
+        const maxRow = 2 + existingRowCount;
+        ansSheet['!ref'] = `A1:I${maxRow}`;
     }
 
     findFirstBlankRow(worksheet) {
@@ -618,9 +705,9 @@ class SlotProblemGenerator {
         あなたには、以下のルールを遵守して、解答して、定められた規則のjson形式で出力して欲しいです。
         具体的には、出力するjsonファイルのl問目の解答が以下のようになるようにしてください:
 
-"id_1": (Problemsの左の番号),
-"id_2": (Problemsの真ん中の番号),
-"id_3": (Problemsの右の番号),
+"A": (Problemsの左の番号),
+"B": (Problemsの真ん中の番号),
+"C": (Problemsの右の番号),
 "D": (解答),
 "E": (誤答例1),
 "F": (誤答例2),
@@ -654,16 +741,12 @@ class SlotProblemGenerator {
         const jsonInput = event.target.value.trim();
         const importBtn = document.getElementById('importBtn');
         
-        console.log('JSON入力の変更を検出:', jsonInput.length > 0 ? '入力あり' : '入力なし');
-        
         if (jsonInput) {
             try {
-                const parsed = JSON.parse(jsonInput);
-                console.log('JSON解析成功:', parsed);
+                JSON.parse(jsonInput);
                 importBtn.disabled = false;
                 this.updateStepStatus(4, 'info', 'JSONの形式が正しく認識されました');
             } catch (e) {
-                console.log('JSON解析エラー:', e.message);
                 importBtn.disabled = true;
                 this.updateStepStatus(4, 'error', `JSONの形式が正しくありません: ${e.message}`);
             }
@@ -679,12 +762,19 @@ class SlotProblemGenerator {
         return cell ? cell.v : null;
     }
 
-    setCellValue(worksheet, cellAddress, value) {
+    setCellValue(worksheet, cellAddress, value, alignment = null) {
         if (!worksheet[cellAddress]) {
-            worksheet[cellAddress] = { v: value };
+            worksheet[cellAddress] = { 
+                v: value,
+                t: typeof value === 'number' ? 'n' : 's'
+            };
         } else {
             worksheet[cellAddress].v = value;
+            worksheet[cellAddress].t = typeof value === 'number' ? 'n' : 's';
         }
+        
+        // セルの変更を確実に反映させる
+        worksheet[cellAddress].w = undefined; // 計算された値をクリア
     }
 
     formatFileSize(bytes) {
@@ -726,6 +816,5 @@ class SlotProblemGenerator {
 
 // アプリケーションを初期化
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('スロット問題生成ツールを初期化中...');
     new SlotProblemGenerator();
 });
