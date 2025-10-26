@@ -60,7 +60,7 @@ class SlotAudio {
     preloadSounds() {
         const soundFiles = {
             start: './sounds/slot_start.wav',
-            stop: './sounds/slot_stop.mp3',
+            stop: window.slotStopAudioUrl || './sounds/slot_stop.mp3', // zipから読み込んだ音声を優先
             rankin: './sounds/rankin.wav',
             heartMoving: './sounds/heart_moving.mp3',
             buttonPushed: './sounds/button_pushed.mp3',
@@ -199,7 +199,8 @@ class SlotAudio {
                 });
             } else {
                 // フォールバック：新しくAudioオブジェクトを作成
-                const audio = new Audio('./sounds/slot_stop.mp3');
+                const audioUrl = window.slotStopAudioUrl || './sounds/slot_stop.mp3';
+                const audio = new Audio(audioUrl);
                 audio.volume = this.masterVolume;
                 audio.play().catch(error => {
                     console.warn('slot_stop.mp3の再生に失敗しました:', error);

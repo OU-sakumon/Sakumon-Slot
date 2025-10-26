@@ -101,6 +101,9 @@ class SlotLogic {
             // 画像を読み込み
             await this.loadImagesFromZip(zip);
             
+            // 音声ファイルを読み込み
+            await this.loadAudioFromZip(zip);
+            
             // データ読み込み完了
             this.isDataLoaded = true;
             console.log('Zipファイルからのデータ読み込み完了');
@@ -182,6 +185,47 @@ class SlotLogic {
         }
         
         console.log(`画像読み込み完了: ${loadedCount}件`);
+    }
+    
+    /**
+     * Zipファイルから音声ファイルを読み込み
+     * @param {JSZip} zip - JSZipオブジェクト
+     * @returns {Promise<void>}
+     */
+    async loadAudioFromZip(zip) {
+        console.log('Zipファイルから音声ファイルを読み込み中...');
+        
+        // slot_stop.mp3を検索
+        let slotStopFile = null;
+        for (const [filename, zipEntry] of Object.entries(zip.files)) {
+            // ディレクトリはスキップ
+            if (zipEntry.dir) continue;
+            
+            // slot_stop.mp3ファイルを検索（大文字小文字を区別しない）
+            if (filename.toLowerCase().includes('slot_stop.mp3')) {
+                slotStopFile = zipEntry;
+                console.log('slot_stop.mp3を発見:', filename);
+                break;
+            }
+        }
+        
+        if (slotStopFile) {
+            try {
+                // 音声ファイルをBlobとして読み込み
+                const blob = await slotStopFile.async('blob');
+                // Blob URLを作成
+                const blobUrl = URL.createObjectURL(blob);
+                
+                // グローバルに保存（SlotAudioクラスで使用）
+                window.slotStopAudioUrl = blobUrl;
+                
+                console.log('slot_stop.mp3の読み込み完了');
+            } catch (error) {
+                console.error('slot_stop.mp3の読み込みエラー:', error);
+            }
+        } else {
+            console.log('slot_stop.mp3が見つかりませんでした（フォールバック: ./sounds/slot_stop.mp3を使用）');
+        }
     }
     
     /**

@@ -23,8 +23,7 @@ class SlotUI {
         // resultDisplayは削除済み
         // this.questionDisplay = document.getElementById('questionDisplay'); // 削除済み
         this.answerChoices = document.getElementById('answerChoices');
-        this.debugDisplay = document.getElementById('debugDisplay');
-        this.debugRowNumbers = document.getElementById('debugRowNumbers');
+        this.timeBonusDisplay = document.getElementById('timeBonusDisplay');
         // this.timeRemaining = document.getElementById('timeRemaining'); // 削除済み
         // this.totalQuestions = document.getElementById('totalQuestions'); // 削除済み
         // this.consecutiveCorrect = document.getElementById('consecutiveCorrect'); // 削除済み
@@ -40,30 +39,25 @@ class SlotUI {
 		this.hasFinalizedQuestion = false; // finalizeQuestionの一度きり実行制御
         this.score = { totalQuestions: 0, consecutiveCorrect: 0, correctAnswers: 0, maxConsecutive: 0 };
         this.gameTimer = null;
-        this.timeLeft = 60; // 60秒
+        this.timeLeft = 120; // 120秒（2分）
         this.gameStarted = false;
         
         // ランクイン音再生フラグ（1回のみ再生のため）
         this.hasPlayedRankinGako = false;
         
         // 初期化はデータが読み込まれた後に実行
-        console.log('SlotUI初期化完了 - データの読み込みを待機中');
     }
     
     /**
      * データが読み込まれた後に初期化
      */
     initialize() {
-        console.log('SlotUI初期化開始');
-        
         // データの初期化
         this.initializeData();
         
         // ロジック層からシンボルを動的生成（データ初期化後に実行）
         this.syncGeometry();
         this.initializeEventListeners();
-        
-        console.log('SlotUI初期化完了');
     }
     
     /**
@@ -80,7 +74,6 @@ class SlotUI {
             
             // リールを初期化
             this.initializeReels();
-            console.log('データの初期化が完了しました');
         } catch (error) {
             console.error('データ初期化エラー:', error);
             alert('データの初期化に失敗しました: ' + error.message);
@@ -95,36 +88,6 @@ class SlotUI {
         console.error(message);
     }
 
-    /**
-     * デバッグ表示を更新（画像ベース）
-     * @param {Object} questionData - 問題データ（行番号と画像パスを含む）
-     */
-    updateDebugDisplay(questionData) {
-        if (!this.debugRowNumbers || !questionData) {
-            this.debugRowNumbers.innerHTML = '<div>行番号: 未選択</div>';
-            return;
-        }
-
-        const answerData = questionData.answer;
-        if (answerData) {
-            this.debugRowNumbers.innerHTML = `
-                <div>Ans行番号: ${questionData.ansRowNumber}</div>
-                <div style="margin-top: 10px; border-top: 1px solid #666; padding-top: 10px;">
-                    <div>左リール: ${answerData.row_L}</div>
-                    <div>中央リール: ${answerData.row_C}</div>
-                    <div>右リール: ${answerData.row_R}</div>
-                </div>
-                <div style="margin-top: 10px; font-size: 11px; color: #999;">
-                    画像パス:<br>
-                    左: ${questionData.left.imagePath}<br>
-                    中央: ${questionData.center.imagePath}<br>
-                    右: ${questionData.right.imagePath}
-                </div>
-            `;
-        } else {
-            this.debugRowNumbers.innerHTML = '<div>行番号: 未選択</div>';
-        }
-    }
     
     
     /**
@@ -139,10 +102,6 @@ class SlotUI {
         // リール初期化後に幾何情報を同期
         setTimeout(() => {
             this.syncGeometry();
-            console.log('幾何情報同期完了:', {
-                symbolHeight: this.logic.symbolHeight,
-                visibleRows: this.logic.visibleRows
-            });
         }, 100);
     }
     
@@ -252,10 +211,6 @@ class SlotUI {
         
         // ゲーム開始前に幾何情報を再同期
         this.syncGeometry();
-        console.log('ゲーム開始時の幾何情報:', {
-            symbolHeight: this.logic.symbolHeight,
-            visibleRows: this.logic.visibleRows
-        });
         
         this.gameStarted = true;
         
@@ -264,11 +219,9 @@ class SlotUI {
         
         // ゲーム状態をリセット
         this.score = { totalQuestions: 0, consecutiveCorrect: 0, correctAnswers: 0, maxConsecutive: 0 };
-        this.timeLeft = 60;
+        this.timeLeft = 120;
         this.hasPlayedRankinGako = false; // ランクイン音再生フラグをリセット
         
-        // デバッグ表示をリセット
-        this.updateDebugDisplay(null);
         
         // 選択肢の枠を表示（中身は全停止まで非表示）
         this.initializeAnswerChoices();
@@ -361,7 +314,6 @@ class SlotUI {
         this.answerChoices.innerHTML = '';
         
         
-        console.log('ゲームが中断されました（結果表示なし）');
     }
     
     /**
@@ -422,8 +374,6 @@ class SlotUI {
         // 問題を選択
         this.currentQuestionData = this.logic.selectRandomQuestion();
         
-        // デバッグ表示を更新
-        this.updateDebugDisplay(this.currentQuestionData);
 
         // UI状態の更新（選択肢の枠は表示、中身は全停止まで非表示）
         this.initializeAnswerChoices();
@@ -501,7 +451,6 @@ class SlotUI {
     stopReel(reelIndex) {
         if (!this.isSpinning[reelIndex]) return;
         
-        console.log(`リール${reelIndex + 1}の停止を開始`);
         
         // 回転状態の更新
         this.isSpinning[reelIndex] = false;
@@ -531,10 +480,8 @@ class SlotUI {
         else if (reelIndex === 1) targetRowNumber = this.currentQuestionData.center.rowNumber;
         else if (reelIndex === 2) targetRowNumber = this.currentQuestionData.right.rowNumber;
         
-        console.log(`リール${reelIndex + 1}の目標行番号: ${targetRowNumber}`);
         const finalPosition = this.logic.getPositionForQuestion(targetRowNumber, reelType);
         this.finalPositions[reelIndex] = finalPosition;
-        console.log(`リール${reelIndex + 1}の最終位置: ${finalPosition}px (symbolHeight: ${this.logic.symbolHeight}px, visibleRows: ${this.logic.visibleRows})`);
         
         // 滑らかな停止アニメーション
         const stopAnimation = () => {
@@ -565,8 +512,6 @@ class SlotUI {
                 this.currentQuestions[reelIndex] = stoppedRowNumber;
                 this.reelStopCompleted[reelIndex] = true;
                 
-                console.log(`リール${reelIndex + 1}停止完了: 位置=${finalPosition}px（ピッタリ）, 行番号=${stoppedRowNumber}`);
-                console.log(`現在のリール状態: [${this.isSpinning.map(s => s ? '回転中' : '停止').join(', ')}]`);
                 
                 // 停止音を再生
                 if (!soundPlayed) {
@@ -629,7 +574,6 @@ class SlotUI {
                 const avgSymbolHeight = totalHeight / count;
                 const snappedHeight = Math.round(avgSymbolHeight);
                 this.logic.symbolHeight = snappedHeight;
-                console.log(`symbolHeight更新: ${snappedHeight}px (${count}リールから計算, 元: ${avgSymbolHeight})`);
             }
             
             // visibleRowsを計算（最初のリールのカラム要素から）
@@ -640,7 +584,6 @@ class SlotUI {
                     const columnHeight = columnEl.getBoundingClientRect().height;
                     const visibleRows = Math.max(1, Math.round(columnHeight / this.logic.symbolHeight));
                     this.logic.visibleRows = visibleRows;
-                    console.log(`visibleRows更新: ${visibleRows} (columnHeight: ${columnHeight}px)`);
                 }
             }
         } catch (e) {
@@ -655,11 +598,6 @@ class SlotUI {
         // 2個目のリールが停止した段階で選択肢を表示
         const stoppedCount = this.reelStopCompleted.filter(done => done).length;
         
-        console.log('ゲーム完了チェック:', {
-            isSpinning: this.isSpinning,
-            reelStopCompleted: this.reelStopCompleted,
-            stoppedCount: stoppedCount
-        });
         
         // 2個目のリールが停止した時点で選択肢を表示
         if (stoppedCount >= 2 && !this.hasFinalizedQuestion) {
@@ -674,7 +612,6 @@ class SlotUI {
      */
     finalizeQuestion() {
         // 問題を確定（行番号を記録）
-        console.log('確定した問題（行番号）:', this.currentQuestions);
         
         // 全てのリールはすでに個別に強調表示されているので、ここでは何もしない
         
@@ -700,7 +637,6 @@ class SlotUI {
                 symbol.style.background = 'rgba(255, 215, 0, 0.2)';
                 // 内側のラインで強調（レイアウトを変えず、はみ出し防止）
                 symbol.style.boxShadow = 'inset 0 5px 0 #ffd700, inset 0 -5px 0 #ffd700, 0 0 20px rgba(255, 215, 0, 0.8)';
-                console.log(`リール${reelIndex + 1}: 行番号 ${targetRowNumber} を強調表示しました`);
             }
         });
     }
@@ -789,7 +725,6 @@ class SlotUI {
         // 選択肢を表示
         this.answerChoices.style.visibility = 'visible';
         
-        console.log('選択肢（画像）を表示:', choices);
     }
     
     /**
@@ -811,6 +746,10 @@ class SlotUI {
             if (this.score.consecutiveCorrect > this.score.maxConsecutive) {
                 this.score.maxConsecutive = this.score.consecutiveCorrect;
             }
+            // 正解時に制限時間を+3秒
+            this.timeLeft += 3;
+            // 時間ボーナス表示
+            this.showTimeBonus();
         } else {
             this.score.consecutiveCorrect = 0; // 連続正解数をリセット
         }
@@ -848,6 +787,30 @@ class SlotUI {
     }
     
     /**
+     * 時間ボーナス表示
+     */
+    showTimeBonus() {
+        if (!this.timeBonusDisplay) return;
+        
+        // 表示をリセット
+        this.timeBonusDisplay.classList.remove('show');
+        this.timeBonusDisplay.style.display = 'block';
+        
+        // 少し遅延してからアニメーション開始
+        setTimeout(() => {
+            this.timeBonusDisplay.classList.add('show');
+        }, 50);
+        
+        // 1.5秒後に非表示
+        setTimeout(() => {
+            this.timeBonusDisplay.classList.remove('show');
+            setTimeout(() => {
+                this.timeBonusDisplay.style.display = 'none';
+            }, 300);
+        }, 1500);
+    }
+    
+    /**
      * プレイ中のランク圏内チェック
      */
     checkRankingDuringGame() {
@@ -870,7 +833,6 @@ class SlotUI {
             // ランク圏内入り音を再生（1回のみ）
             this.audio.playRankinGakoSound();
             this.hasPlayedRankinGako = true; // フラグを立てて重複再生を防止
-            console.log('ランク圏内入り！rankin_gako.mp3を再生しました（1回のみ）');
         }
     }
     
@@ -1170,15 +1132,11 @@ class SlotUI {
             const playPromise = video.play();
             if (playPromise !== undefined) {
                 playPromise.then(() => {
-                    console.log('ランキング入り動画の再生を開始しました（ループ再生）');
                 }).catch(error => {
-                    console.warn('動画の自動再生に失敗しました:', error);
                     // 自動再生が失敗した場合、ユーザーインタラクション後に再生を試行
-                    console.log('ユーザーインタラクション後に再生を再試行します');
                 });
             }
             
-            console.log('ランキング入り動画を表示しました（ループ再生、音声有効）');
         }
     }
     
@@ -1199,7 +1157,6 @@ class SlotUI {
             // 動画を非表示
             videoBackground.style.display = 'none';
             
-            console.log('ランキング入り動画を非表示にしました');
         }
     }
     
@@ -1232,15 +1189,11 @@ class SlotUI {
             const playPromise = overlayVideo.play();
             if (playPromise !== undefined) {
                 playPromise.then(() => {
-                    console.log('ランキング入りオーバーレイ動画の再生を開始しました');
                 }).catch(error => {
-                    console.warn('オーバーレイ動画の自動再生に失敗しました:', error);
                     // 自動再生が失敗した場合、ユーザーインタラクション後に再生を試行
-                    console.log('ユーザーインタラクション後にオーバーレイ動画の再生を再試行します');
                 });
             }
             
-            console.log('ランキング入りオーバーレイ動画を表示しました（1回のみ再生）');
         }
     }
     
@@ -1261,7 +1214,6 @@ class SlotUI {
             // 動画を非表示
             overlayContainer.style.display = 'none';
             
-            console.log('ランキング入りオーバーレイ動画を非表示にしました');
         }
     }
     
@@ -1294,15 +1246,11 @@ class SlotUI {
             const playPromise = overlayVideo.play();
             if (playPromise !== undefined) {
                 playPromise.then(() => {
-                    console.log('一位ランキング入りオーバーレイ動画の再生を開始しました');
                 }).catch(error => {
-                    console.warn('一位オーバーレイ動画の自動再生に失敗しました:', error);
                     // 自動再生が失敗した場合、ユーザーインタラクション後に再生を試行
-                    console.log('ユーザーインタラクション後に一位オーバーレイ動画の再生を再試行します');
                 });
             }
             
-            console.log('一位ランキング入りオーバーレイ動画を表示しました（1回のみ再生）');
         }
     }
     
@@ -1323,7 +1271,6 @@ class SlotUI {
             // 動画を非表示
             overlayContainer.style.display = 'none';
             
-            console.log('一位ランキング入りオーバーレイ動画を非表示にしました');
         }
     }
     
@@ -1452,7 +1399,7 @@ class SlotUI {
         // ゲーム状態をリセット
         this.gameStarted = false;
         this.score = { totalQuestions: 0, consecutiveCorrect: 0, correctAnswers: 0, maxConsecutive: 0 };
-        this.timeLeft = 60;
+        this.timeLeft = 120;
         this.hasPlayedRankinGako = false; // ランクイン音再生フラグをリセット
         
         // タイマーをクリア
@@ -1496,7 +1443,6 @@ class SlotUI {
         this.scoreDisplay.style.display = 'none';
         this.updateScoreDisplay();
         
-        console.log('ゲーム状態を完全にリセットしました');
     }
     
     /**
@@ -1574,7 +1520,6 @@ class SlotUI {
      */
     exportRankings() {
         try {
-            console.log('ランキングエクスポート開始');
             
             // エクスポート前に最新データを強制読み込み
             this.ranking.refreshRankings();
@@ -1583,8 +1528,6 @@ class SlotUI {
             const correctAnswers = this.ranking.getCorrectAnswersRanking();
             const consecutiveAnswers = this.ranking.getConsecutiveAnswersRanking();
             
-            console.log(`正解数ランキング: ${correctAnswers.length}件`);
-            console.log(`連続正解数ランキング: ${consecutiveAnswers.length}件`);
             
             if (correctAnswers.length === 0 && consecutiveAnswers.length === 0) {
                 alert('エクスポートするランキングデータがありません。\nまずゲームをプレイしてランキングデータを作成してください。');
@@ -1611,7 +1554,6 @@ class SlotUI {
                 URL.revokeObjectURL(url);
                 
                 alert(`ランキングデータをエクスポートしました。\n正解数ランキング: ${correctAnswers.length}件\n連続正解数ランキング: ${consecutiveAnswers.length}件\n\nファイル名: ${filename}`);
-                console.log('ランキングエクスポート完了');
             } else {
                 alert('エクスポートに失敗しました。データの処理中にエラーが発生しました。');
             }
@@ -1694,7 +1636,6 @@ class SlotUI {
                 document.getElementById('slotScreen').style.display = 'none';
                 
                 alert('システムの完全再起動が完了しました。');
-                console.log('システムの完全再起動が完了しました');
                 
             } catch (error) {
                 console.error('完全再起動に失敗しました:', error);
@@ -1712,7 +1653,7 @@ class SlotUI {
         // ゲーム状態をリセット
         this.gameStarted = false;
         this.score = { totalQuestions: 0, consecutiveCorrect: 0, correctAnswers: 0, maxConsecutive: 0 };
-        this.timeLeft = 60;
+        this.timeLeft = 120;
         this.hasPlayedRankinGako = false; // ランクイン音再生フラグをリセット
         
         // タイマーをクリア
@@ -1774,10 +1715,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
     
-    console.log('阪大作問サークルスロットが初期化されました！');
-    console.log('使用可能なコマンド:');
-    console.log('- getSlotDebugInfo() : デバッグ情報を表示');
-    console.log('- getCurrentSlotState() : 現在のスロット状態を確認');
     
     // グローバル関数として公開
     window.closeResultPopup = () => {
