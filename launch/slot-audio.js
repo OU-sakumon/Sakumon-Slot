@@ -16,7 +16,9 @@ class SlotAudio {
             rankin: null,
             heartMoving: null,
             buttonPushed: null,
-            rankinGako: null
+            rankinGako: null,
+            answerCorrect: null,
+            answerMiss: null
         };
         
         // ハート音のリピート再生用
@@ -64,7 +66,9 @@ class SlotAudio {
             rankin: './sounds/rankin.wav',
             heartMoving: './sounds/heart_moving.mp3',
             buttonPushed: './sounds/button_pushed.mp3',
-            rankinGako: './sounds/rankin_gako.mp3'
+            rankinGako: './sounds/rankin_gako.mp3',
+            answerCorrect: window.answerCorrectAudioUrl || './sounds/answer_correct.mp3', // zipから読み込んだ音声を優先
+            answerMiss: window.answerMissAudioUrl || './sounds/answer_miss.mp3' // zipから読み込んだ音声を優先
         };
         
         Object.keys(soundFiles).forEach(key => {
@@ -326,6 +330,62 @@ class SlotAudio {
             }
         } catch (error) {
             console.warn('rankin_gako.mp3の読み込みに失敗しました:', error);
+        }
+    }
+    
+    /**
+     * 正解音（answer_correct.mp3）
+     */
+    playAnswerCorrectSound() {
+        if (!this.isEnabled) return;
+        
+        try {
+            if (this.preloadedSounds.answerCorrect) {
+                // プリロードされた音声を複製して再生（同時再生対応）
+                const audio = this.preloadedSounds.answerCorrect.cloneNode();
+                audio.volume = this.masterVolume;
+                audio.play().catch(error => {
+                    console.warn('answer_correct.mp3の再生に失敗しました:', error);
+                });
+            } else {
+                // フォールバック：新しくAudioオブジェクトを作成
+                const audioUrl = window.answerCorrectAudioUrl || './sounds/answer_correct.mp3';
+                const audio = new Audio(audioUrl);
+                audio.volume = this.masterVolume;
+                audio.play().catch(error => {
+                    console.warn('answer_correct.mp3の再生に失敗しました:', error);
+                });
+            }
+        } catch (error) {
+            console.warn('answer_correct.mp3の読み込みに失敗しました:', error);
+        }
+    }
+    
+    /**
+     * 不正解音（answer_miss.mp3）
+     */
+    playAnswerMissSound() {
+        if (!this.isEnabled) return;
+        
+        try {
+            if (this.preloadedSounds.answerMiss) {
+                // プリロードされた音声を複製して再生（同時再生対応）
+                const audio = this.preloadedSounds.answerMiss.cloneNode();
+                audio.volume = this.masterVolume;
+                audio.play().catch(error => {
+                    console.warn('answer_miss.mp3の再生に失敗しました:', error);
+                });
+            } else {
+                // フォールバック：新しくAudioオブジェクトを作成
+                const audioUrl = window.answerMissAudioUrl || './sounds/answer_miss.mp3';
+                const audio = new Audio(audioUrl);
+                audio.volume = this.masterVolume;
+                audio.play().catch(error => {
+                    console.warn('answer_miss.mp3の再生に失敗しました:', error);
+                });
+            }
+        } catch (error) {
+            console.warn('answer_miss.mp3の読み込みに失敗しました:', error);
         }
     }
 }

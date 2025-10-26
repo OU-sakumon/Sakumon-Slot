@@ -195,36 +195,57 @@ class SlotLogic {
     async loadAudioFromZip(zip) {
         console.log('Zipファイルから音声ファイルを読み込み中...');
         
-        // slot_stop.mp3を検索
-        let slotStopFile = null;
+        // 音声ファイルの検索（大文字小文字を区別しない）
+        const audioFiles = {
+            slotStop: null,
+            answerCorrect: null,
+            answerMiss: null
+        };
+        
         for (const [filename, zipEntry] of Object.entries(zip.files)) {
             // ディレクトリはスキップ
             if (zipEntry.dir) continue;
             
-            // slot_stop.mp3ファイルを検索（大文字小文字を区別しない）
-            if (filename.toLowerCase().includes('slot_stop.mp3')) {
-                slotStopFile = zipEntry;
+            const lowerFilename = filename.toLowerCase();
+            
+            // 各音声ファイルを検索
+            if (lowerFilename.includes('slot_stop.mp3')) {
+                audioFiles.slotStop = zipEntry;
                 console.log('slot_stop.mp3を発見:', filename);
-                break;
+            } else if (lowerFilename.includes('answer_correct.mp3')) {
+                audioFiles.answerCorrect = zipEntry;
+                console.log('answer_correct.mp3を発見:', filename);
+            } else if (lowerFilename.includes('answer_miss.mp3')) {
+                audioFiles.answerMiss = zipEntry;
+                console.log('answer_miss.mp3を発見:', filename);
             }
         }
         
-        if (slotStopFile) {
-            try {
-                // 音声ファイルをBlobとして読み込み
-                const blob = await slotStopFile.async('blob');
-                // Blob URLを作成
-                const blobUrl = URL.createObjectURL(blob);
-                
-                // グローバルに保存（SlotAudioクラスで使用）
-                window.slotStopAudioUrl = blobUrl;
-                
-                console.log('slot_stop.mp3の読み込み完了');
-            } catch (error) {
-                console.error('slot_stop.mp3の読み込みエラー:', error);
+        // 各音声ファイルを読み込み
+        for (const [audioType, zipEntry] of Object.entries(audioFiles)) {
+            if (zipEntry) {
+                try {
+                    // 音声ファイルをBlobとして読み込み
+                    const blob = await zipEntry.async('blob');
+                    // Blob URLを作成
+                    const blobUrl = URL.createObjectURL(blob);
+                    
+                    // グローバルに保存（SlotAudioクラスで使用）
+                    if (audioType === 'slotStop') {
+                        window.slotStopAudioUrl = blobUrl;
+                    } else if (audioType === 'answerCorrect') {
+                        window.answerCorrectAudioUrl = blobUrl;
+                    } else if (audioType === 'answerMiss') {
+                        window.answerMissAudioUrl = blobUrl;
+                    }
+                    
+                    console.log(`${audioType}の読み込み完了`);
+                } catch (error) {
+                    console.error(`${audioType}の読み込みエラー:`, error);
+                }
+            } else {
+                console.log(`${audioType}が見つかりませんでした（フォールバック: ./sounds/${audioType}.mp3を使用）`);
             }
-        } else {
-            console.log('slot_stop.mp3が見つかりませんでした（フォールバック: ./sounds/slot_stop.mp3を使用）');
         }
     }
     
@@ -451,8 +472,9 @@ class SlotLogic {
         let randomIndex;
         let attempts = 0;
         const maxAttempts = 50; // 最大試行回数
+        let foundValidData = false;
         
-        do {
+        while (attempts < maxAttempts && !foundValidData) {
             const randomValue = Math.random();
             randomIndex = Math.floor(randomValue * this.ans.length);
             attempts++;
@@ -469,10 +491,28 @@ class SlotLogic {
                 continue;
             }
             
-            // 有効なデータが見つかった場合、ループを抜ける
-            break;
+            // D、E、F列（正解と不正解の選択肢）の空白チェック
+            // D列: 正解 (ans)
+            // E列: 不正解1 (lie_answer1) 
+            // F列: 不正解2 (lie_answer2)
+            if (!answerData.ans || !answerData.lie_answer1 || !answerData.lie_answer2) {
+                continue;
+            }
             
-        } while (attempts < maxAttempts);
+            // 文字列の場合、空白文字のみの場合は除外
+            if (typeof answerData.ans === 'string' && answerData.ans.trim() === '') {
+                continue;
+            }
+            if (typeof answerData.lie_answer1 === 'string' && answerData.lie_answer1.trim() === '') {
+                continue;
+            }
+            if (typeof answerData.lie_answer2 === 'string' && answerData.lie_answer2.trim() === '') {
+                continue;
+            }
+            
+            // 有効なデータが見つかった場合、ループを抜ける
+            foundValidData = true;
+        }
         
         // 最大試行回数に達した場合のエラーハンドリング
         if (attempts >= maxAttempts) {

@@ -201,39 +201,6 @@
             gap: 20px;
         }
 
-        /* デバッグ表示エリアのスタイル */
-        .debug-display {
-            position: fixed;
-            left: 20px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: rgba(0, 0, 0, 0.8);
-            border: 2px solid #ffd700;
-            border-radius: 8px;
-            padding: 15px;
-            color: #ffd700;
-            font-size: 14px;
-            z-index: 1000;
-            min-width: 200px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
-        }
-
-        .debug-title {
-            font-weight: bold;
-            margin-bottom: 10px;
-            text-align: center;
-            border-bottom: 1px solid #ffd700;
-            padding-bottom: 5px;
-        }
-
-        .debug-row-numbers {
-            line-height: 1.4;
-        }
-
-        .debug-row-numbers div {
-            margin-bottom: 5px;
-        }
-
         .slot-machine {
             background: #1a1a1a;
             border-radius: 8px;
@@ -972,6 +939,43 @@
             color: white;
         }
 
+        /* スクロールバーのカスタムスタイル */
+        #correctAnswersRanking::-webkit-scrollbar,
+        #consecutiveAnswersRanking::-webkit-scrollbar,
+        .result-popup-content::-webkit-scrollbar {
+            width: 12px;
+        }
+
+        #correctAnswersRanking::-webkit-scrollbar-track,
+        #consecutiveAnswersRanking::-webkit-scrollbar-track,
+        .result-popup-content::-webkit-scrollbar-track {
+            background: #0a0a0a;
+            border-radius: 8px;
+            border: 2px solid #333;
+        }
+
+        #correctAnswersRanking::-webkit-scrollbar-thumb,
+        #consecutiveAnswersRanking::-webkit-scrollbar-thumb,
+        .result-popup-content::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #c00000 0%, #8b0000 100%);
+            border-radius: 8px;
+            border: 2px solid #ffd700;
+        }
+
+        #correctAnswersRanking::-webkit-scrollbar-thumb:hover,
+        #consecutiveAnswersRanking::-webkit-scrollbar-thumb:hover,
+        .result-popup-content::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #ff0000 0%, #c00000 100%);
+        }
+
+        /* Firefox用のスクロールバースタイル */
+        #correctAnswersRanking,
+        #consecutiveAnswersRanking,
+        .result-popup-content {
+            scrollbar-width: thin;
+            scrollbar-color: #c00000 #0a0a0a;
+        }
+
         .result-close-button {
             background: linear-gradient(135deg, #c00000 0%, #8b0000 100%);
             color: white;
@@ -1098,14 +1102,6 @@
         
         
         <div class="slot-screen-container">
-            <!-- デバッグ表示エリア（左側） -->
-            <div id="debugDisplay" class="debug-display">
-                <div class="debug-title">デバッグ情報</div>
-                <div id="debugRowNumbers" class="debug-row-numbers">
-                    <div>行番号: 未選択</div>
-                </div>
-            </div>
-            
             <div class="slot-machine">
                 <div class="title">
                     <img src="images/ui/title.png" alt="阪大作問サークル スロット" class="title-image">
@@ -1151,7 +1147,7 @@
     
     <!-- 時間ボーナス表示 -->
     <div class="time-bonus-display" id="timeBonusDisplay" style="display: none;">
-        <div class="time-bonus-text">+3秒</div>
+        <div class="time-bonus-text">+5秒</div>
     </div>
 
     <!-- ランキング入り動画背景 -->
@@ -1163,14 +1159,14 @@
 
     <!-- ランキング入りオーバーレイ動画（1回のみ再生） -->
     <div id="rankingOverlayVideo" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; display: none; pointer-events: none;">
-        <video id="rankingOverlayVideoElement" autoplay style="width: 100%; height: 100%; object-fit: cover;">
+        <video id="rankingOverlayVideoElement" style="width: 100%; height: 100%; object-fit: cover;">
             <source src="videos/rankin_overlay_animation.mp4" type="video/mp4">
         </video>
     </div>
 
     <!-- 一位ランキング入りオーバーレイ動画（1回のみ再生） -->
     <div id="topRankingOverlayVideo" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; display: none; pointer-events: none;">
-        <video id="topRankingOverlayVideoElement" autoplay style="width: 100%; height: 100%; object-fit: cover;">
+        <video id="topRankingOverlayVideoElement" style="width: 100%; height: 100%; object-fit: cover;">
             <source src="videos/toprankin_overlay_animation.mp4" type="video/mp4">
         </video>
     </div>
@@ -1230,18 +1226,18 @@
 
     <!-- ランキング表示ポップアップ -->
     <div id="rankingPopup" class="result-popup" style="display: none;">
-        <div class="result-popup-content" style="max-width: 700px;">
+        <div class="result-popup-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
             <div class="result-title">ランキング</div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px;">
                 <div>
                     <h3 style="color: #ffd700; margin-bottom: 15px; text-align: center; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);">正解数ランキング</h3>
-                    <div id="correctAnswersRanking" style="background: #0a0a0a; padding: 20px; border-radius: 8px; border: 4px solid #ffd700;">
+                    <div id="correctAnswersRanking" style="background: #0a0a0a; padding: 20px; border-radius: 8px; border: 4px solid #ffd700; max-height: 500px; overflow-y: auto;">
                         <!-- ランキングデータはJavaScriptで動的生成 -->
                     </div>
                 </div>
                 <div>
                     <h3 style="color: #ffd700; margin-bottom: 15px; text-align: center; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);">連続正解数ランキング</h3>
-                    <div id="consecutiveAnswersRanking" style="background: #0a0a0a; padding: 20px; border-radius: 8px; border: 4px solid #ffd700;">
+                    <div id="consecutiveAnswersRanking" style="background: #0a0a0a; padding: 20px; border-radius: 8px; border: 4px solid #ffd700; max-height: 500px; overflow-y: auto;">
                         <!-- ランキングデータはJavaScriptで動的生成 -->
                     </div>
                 </div>
@@ -1338,10 +1334,6 @@
                     showError('Zipファイル（.zip）を選択してください。');
                     return;
                 }
-                
-                // デバッグ用：slotLogicの状態を確認
-                console.log('slotLogic:', window.slotLogic);
-                console.log('loadFromZipFile method:', typeof window.slotLogic?.loadFromZipFile);
                 
                 if (!window.slotLogic || typeof window.slotLogic.loadFromZipFile !== 'function') {
                     showError('スロットロジックが正しく初期化されていません。ページを再読み込みしてください。');

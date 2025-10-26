@@ -131,7 +131,10 @@ config.local.json
 
 テスト
 slot_stop.mp3
+answer_correct.mp3
+answer_miss.mp3
 *.png
+
 *.json
 template
 input
@@ -146,3 +149,4 @@ test.py
 # 公開情報
 !スロット-テンプレ.xlsx
 !サンプル問題.zip
+!title.png

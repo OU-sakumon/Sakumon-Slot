@@ -6,7 +6,8 @@
 class SlotRanking {
     constructor() {
         this.rankingKey = 'slotRanking';
-        this.maxRankingEntries = 15;
+        this.maxRankingEntries = 15; // ランキングの最大保存件数
+        this.videoThreshold = 5; // 動画再生に必要な最小ランキング件数
         this.rankings = {
             correctAnswers: [],
             consecutiveAnswers: []
@@ -85,6 +86,21 @@ class SlotRanking {
             timestamp: new Date().toISOString()
         };
         
+        // 一時的にエントリを追加してランクを計算
+        const tempRankings = [...this.rankings.correctAnswers, entry];
+        tempRankings.sort((a, b) => {
+            if (b.correctAnswers !== a.correctAnswers) {
+                return b.correctAnswers - a.correctAnswers;
+            }
+            return b.accuracy - a.accuracy;
+        });
+        
+        // 実際のランクを計算
+        const rank = tempRankings.findIndex(e => 
+            e.playerName === playerName && e.timestamp === entry.timestamp
+        ) + 1;
+        
+        // ランキングに追加
         this.rankings.correctAnswers.push(entry);
         this.rankings.correctAnswers.sort((a, b) => {
             if (b.correctAnswers !== a.correctAnswers) {
@@ -95,10 +111,6 @@ class SlotRanking {
         
         this.rankings.correctAnswers = this.rankings.correctAnswers.slice(0, this.maxRankingEntries);
         this.saveRankings();
-        
-        const rank = this.rankings.correctAnswers.findIndex(e => 
-            e.playerName === playerName && e.timestamp === entry.timestamp
-        ) + 1;
         
         return {
             isRanked: rank <= this.maxRankingEntries,
@@ -119,6 +131,21 @@ class SlotRanking {
             timestamp: new Date().toISOString()
         };
         
+        // 一時的にエントリを追加してランクを計算
+        const tempRankings = [...this.rankings.consecutiveAnswers, entry];
+        tempRankings.sort((a, b) => {
+            if (b.consecutiveAnswers !== a.consecutiveAnswers) {
+                return b.consecutiveAnswers - a.consecutiveAnswers;
+            }
+            return b.accuracy - a.accuracy;
+        });
+        
+        // 実際のランクを計算
+        const rank = tempRankings.findIndex(e => 
+            e.playerName === playerName && e.timestamp === entry.timestamp
+        ) + 1;
+        
+        // ランキングに追加
         this.rankings.consecutiveAnswers.push(entry);
         this.rankings.consecutiveAnswers.sort((a, b) => {
             if (b.consecutiveAnswers !== a.consecutiveAnswers) {
@@ -129,10 +156,6 @@ class SlotRanking {
         
         this.rankings.consecutiveAnswers = this.rankings.consecutiveAnswers.slice(0, this.maxRankingEntries);
         this.saveRankings();
-        
-        const rank = this.rankings.consecutiveAnswers.findIndex(e => 
-            e.playerName === playerName && e.timestamp === entry.timestamp
-        ) + 1;
         
         return {
             isRanked: rank <= this.maxRankingEntries,
@@ -156,37 +179,87 @@ class SlotRanking {
     }
     
     /**
-     * 正解数ランキングの上位5位以内に入るかチェック
+     * 正解数ランキングの上位5位以内に入るかチェック（動画再生用）
+     * 動画再生条件：ランキングが5件埋まっていて、かつ5位以内にランクインする時のみ
      */
     isCorrectAnswersTop5(correctAnswers) {
-        if (this.rankings.correctAnswers.length < this.maxRankingEntries) {
-            return true;
+        // ランキングが5件埋まっていない場合は動画再生なし
+        if (this.rankings.correctAnswers.length < this.videoThreshold) {
+            console.log(`❌ 正解数ランキングが埋まっていないため動画なし (現在: ${this.rankings.correctAnswers.length}件/${this.videoThreshold}件必要)`);
+            return false;
         }
-        const lowestScore = this.rankings.correctAnswers[this.maxRankingEntries - 1].correctAnswers;
-        return correctAnswers > lowestScore;
+        
+        // スコアが0以下の場合はランクイン対象外
+        if (correctAnswers <= 0) {
+            console.log('❌ 正解数が0以下のためランクイン対象外');
+            return false;
+        }
+        
+        // ランキングが5件以上ある場合、5位のスコアと比較
+        const fifthScore = this.rankings.correctAnswers[this.videoThreshold - 1].correctAnswers;
+        const isRanked = correctAnswers > fifthScore;
+        console.log(`正解数ランクインチェック: ${correctAnswers} vs 5位 ${fifthScore} = ${isRanked ? '✅ランクイン（動画再生）' : '❌ランクイン圏外'}`);
+        return isRanked;
     }
     
     /**
-     * 連続正解数ランキングの上位5位以内に入るかチェック
+     * 連続正解数ランキングの上位5位以内に入るかチェック（動画再生用）
+     * 動画再生条件：ランキングが5件埋まっていて、かつ5位以内にランクインする時のみ
      */
     isConsecutiveAnswersTop5(consecutiveAnswers) {
-        if (this.rankings.consecutiveAnswers.length < this.maxRankingEntries) {
-            return true;
+        // ランキングが5件埋まっていない場合は動画再生なし
+        if (this.rankings.consecutiveAnswers.length < this.videoThreshold) {
+            console.log(`❌ 連続正解数ランキングが埋まっていないため動画なし (現在: ${this.rankings.consecutiveAnswers.length}件/${this.videoThreshold}件必要)`);
+            return false;
         }
-        const lowestScore = this.rankings.consecutiveAnswers[this.maxRankingEntries - 1].consecutiveAnswers;
-        return consecutiveAnswers > lowestScore;
+        
+        // スコアが0以下の場合はランクイン対象外
+        if (consecutiveAnswers <= 0) {
+            console.log('❌ 連続正解数が0以下のためランクイン対象外');
+            return false;
+        }
+        
+        // ランキングが5件以上ある場合、5位のスコアと比較
+        const fifthScore = this.rankings.consecutiveAnswers[this.videoThreshold - 1].consecutiveAnswers;
+        const isRanked = consecutiveAnswers > fifthScore;
+        console.log(`連続正解数ランクインチェック: ${consecutiveAnswers} vs 5位 ${fifthScore} = ${isRanked ? '✅ランクイン（動画再生）' : '❌ランクイン圏外'}`);
+        return isRanked;
     }
     
     /**
      * ランキングデータをクリア
      */
     clearRankings() {
+        console.log('ランキングデータクリア処理を開始...');
+        
+        // メモリ上のデータをクリア
         this.rankings = {
             correctAnswers: [],
             consecutiveAnswers: []
         };
-        this.saveRankings();
-        console.log('ランキングデータをクリアしました');
+        console.log('メモリ上のランキングデータをクリアしました:', this.rankings);
+        
+        // ローカルストレージからも完全に削除
+        try {
+            const keyBefore = localStorage.getItem(this.rankingKey);
+            console.log('削除前のローカルストレージデータ:', keyBefore);
+            
+            localStorage.removeItem(this.rankingKey);
+            
+            const keyAfter = localStorage.getItem(this.rankingKey);
+            console.log('削除後のローカルストレージデータ:', keyAfter);
+            
+            if (keyAfter === null) {
+                console.log('✅ ローカルストレージからランキングデータを完全に削除しました');
+            } else {
+                console.warn('⚠️ ローカルストレージからの削除が不完全な可能性があります');
+            }
+        } catch (error) {
+            console.error('❌ ローカルストレージからの削除に失敗:', error);
+            throw error; // エラーを上位に伝播させる
+        }
+        
+        console.log('ランキングデータクリア処理が完了しました');
     }
     
     /**
@@ -203,11 +276,8 @@ class SlotRanking {
      */
     exportRankings() {
         try {
-            // エクスポート前に最新データを強制読み込み
-            this.refreshRankings();
-            
-            // デバッグ用：現在のランキングデータをコンソールに出力
-            console.log('エクスポート対象のランキングデータ:', this.rankings);
+            // エクスポート前に最新データを強制読み込み（クリア後は不要）
+            // this.refreshRankings(); // コメントアウト：クリア後に復活するのを防ぐ
             
             const exportData = {
                 version: '1.0',
@@ -251,31 +321,35 @@ class SlotRanking {
     }
     
     /**
-     * 正解数ランキングで一位かどうかを判定
+     * 正解数ランキングで一位かどうかを判定（新規スコアが1位になるかチェック）
      * @param {number} correctAnswers - 正解数
      * @returns {boolean} 一位かどうか
      */
     isCorrectAnswersFirst(correctAnswers) {
+        // ランキングが空の場合は自動的に1位
         if (this.rankings.correctAnswers.length === 0) {
-            return false;
+            return true;
         }
         
         const topEntry = this.rankings.correctAnswers[0];
-        return topEntry.correctAnswers === correctAnswers;
+        // 現在のトップスコアより高いか、同じなら1位
+        return correctAnswers >= topEntry.correctAnswers;
     }
     
     /**
-     * 連続正解数ランキングで一位かどうかを判定
+     * 連続正解数ランキングで一位かどうかを判定（新規スコアが1位になるかチェック）
      * @param {number} consecutiveAnswers - 連続正解数
      * @returns {boolean} 一位かどうか
      */
     isConsecutiveAnswersFirst(consecutiveAnswers) {
+        // ランキングが空の場合は自動的に1位
         if (this.rankings.consecutiveAnswers.length === 0) {
-            return false;
+            return true;
         }
         
         const topEntry = this.rankings.consecutiveAnswers[0];
-        return topEntry.consecutiveAnswers === consecutiveAnswers;
+        // 現在のトップスコアより高いか、同じなら1位
+        return consecutiveAnswers >= topEntry.consecutiveAnswers;
     }
 }
 
