@@ -728,6 +728,8 @@ class SlotProblemGenerator {
 10.leやgeは使わずに、>や<を使ってください。
 11. 数式を表示する時は$で挟むことを忘れないでください。
 12. \quadは使用しないでください。
+13. fracやsum、limなどのときは\displaystyleを使用してください。
+14. 出力するjsonの形式には細心の注意を払ってください。特に、TeXのバックスラッシュは\\として、エスケープされた文字列になっていることを確認してください。
 `;
 
         navigator.clipboard.writeText(prompt).then(() => {

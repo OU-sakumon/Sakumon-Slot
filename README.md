@@ -4,7 +4,7 @@
 
 阪大作問サークルが開発した、パーツを組み合わせてできた問題を解答するスロットマシンゲームです。
 プレイするには、問題ファイルを作成する必要があります。
-作成方法については`docs/マニュアル.md`をご覧ください。
+問題の作成に関する便利なツールを用意しています。詳しくは`docs/マニュアル.md`をご覧ください。
 問題ファイルのサンプルとして、`サンプル問題.zip`を準備しています。これをアップロードすると、サンプル問題でプレイができます。
 
 ## 特徴
@@ -16,20 +16,22 @@
 - 📦 **Zipファイルアップロード**: Excelファイルと画像フォルダをまとめてZipファイルでアップロードできます。
 
 
-## インストール
+## 各種リンク
 
-リポジトリをクローンまたはダウンロード、Webサイトからプレイ
+リポジトリをクローンまたはダウンロード、Webサイトからプレイ。
 
-**スロットゲーム**: https://ou-sakumon.github.io/Sakumon-Slot/launch/index.html
+**スロット**: https://ou-sakumon.github.io/Sakumon-Slot/launch/index.html
 
-**問題生成ツール**: https://ou-sakumon.github.io/Sakumon-Slot/dev/make_anssheet/index.html
+**解答作成ツール**: https://ou-sakumon.github.io/Sakumon-Slot/dev/解答作成ツール/index.html
+
+**解答入力ツール**: https://ou-sakumon.github.io/Sakumon-Slot/dev/解答入力ツール/index.html
 
 
 ## 使用方法
 
 1. **Zipファイルの準備**: 
    - 問題と画像をまとめた`zip`ファイルの作成
-   - マニュアル・サンプル問題は`docs/`を参照してください。
+   - 使い方・作成ツールは`docs/マニュアル.md`をご覧ください。
 
 2. **アップロード**: 
    - スロットゲームを開く

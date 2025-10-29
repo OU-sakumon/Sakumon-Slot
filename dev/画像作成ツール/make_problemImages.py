@@ -25,7 +25,7 @@ SHEET_COLUMN_SETS = [
     ("Que_L","B","B"),
     ("Que_C","B","B"),
     ("Que_R","B","B"),
-    ("Ans", "D", "G"),
+    ("Ans", "D", "F"),
     ("Ans", "I", "I"),
 ]
 
@@ -185,10 +185,13 @@ class XlsxToTeXToPng:
         raw_content = raw_content.replace('_x000D_', '\r')
         raw_content = raw_content.replace('_x000A_', '\n')
         
-        # 3) 全体を一度に処理してから行ごとに分割
+        # 3) 数式の$記号の対応をチェック・修正
+        raw_content = self.fix_math_delimiters(raw_content)
+        
+        # 4) 全体を一度に処理してから行ごとに分割
         processed_content = self.process_cell_content(raw_content)
         
-        # 4) 行ごとに分割して結合（行末に強制改行 \\ を付与）
+        # 5) 行ごとに分割して結合（行末に強制改行 \\ を付与）
         lines = processed_content.splitlines()
         return "\\\\\n".join(lines)
     
@@ -233,6 +236,29 @@ class XlsxToTeXToPng:
             protected_text = protected_text.replace(placeholder, math_part)
         
         return protected_text
+    
+    def fix_math_delimiters(self, text):
+        """
+        数式の$記号の対応をチェック・修正する
+        
+        Args:
+            text (str): 処理するテキスト
+        
+        Returns:
+            str: 修正されたテキスト
+        """
+        # $記号の数をカウント
+        dollar_count = text.count('$')
+        
+        # $記号の数が奇数の場合、最後に$を追加
+        if dollar_count % 2 != 0:
+            print(f"警告: 数式の$記号が対応していません。自動修正します: '{text[:50]}...'")
+            text = text + '$'
+        
+        # 空の数式（$$）をチェックして修正（連続する$のみ）
+        text = re.sub(r'\$\$', '$\\text{ }$', text)
+        
+        return text
 
     def process_cell_content(self, text):
         """
@@ -282,6 +308,9 @@ class XlsxToTeXToPng:
         for func in ['sin', 'cos', 'tan']:
             pattern = rf'(?<!\\)\b{func}(?!h)'
             inner_content = re.sub(pattern, rf'\\{func}', inner_content)
+        
+        # 1.5) \d を \displaystyle に変換
+        inner_content = re.sub(r'\\d\b', r'\\displaystyle', inner_content)
 
         # よく使う他の関数（ハイパボリックでないもの）も補正
         for func in ['log', 'ln', 'exp']:
@@ -294,7 +323,8 @@ class XlsxToTeXToPng:
             # 直後が英字/数字のとき（例: \\sinx, \\log10 -> それぞれ " ")
             inner_content = re.sub(rf'(\\{func})([A-Za-z0-9])', rf'\1 \2', inner_content)
             # 直後が別の制御綴（例: \\sin\\alpha -> "\\sin \\alpha"）
-            inner_content = re.sub(rf'(\\{func})(\\[A-Za-z]+)', rf'\1 \2', inner_content)
+            # \displaystyle, \text などの特殊なコマンドは除外
+            inner_content = re.sub(rf'(\\{func})(\\(?!displaystyle|text|mathrm|mathbb|d\b)[A-Za-z]+)', rf'\1 \2', inner_content)
 
         # 3) よくあるUnicode記号をTeXに置換（数式内のみ）
         unicode_to_tex = {
@@ -307,8 +337,8 @@ class XlsxToTeXToPng:
             '∓': r'\\mp ',
             '∞': r'\\infty ',
             'π': r'\\pi ',
-            '≤': r'\\leq ',
-            '≦': r'\\leq ',
+            '≤': r'\\leqq ',
+            '≦': r'\\leqq ',
             '≥': r'\\geq ',
             '≧': r'\\geq ',
             '≠': r'\\neq ',
@@ -333,12 +363,21 @@ class XlsxToTeXToPng:
         }
         for uni, tex in unicode_to_tex.items():
             inner_content = inner_content.replace(uni, tex)
-
+        
+        # 4) 基本的なクリーンアップのみ（TeXコンパイラに任せる）
+        # 連続するスペースを整理
+        inner_content = re.sub(r'\s+', ' ', inner_content)
+        
+        # 5) 日本語文字を\text{}で囲む
+        # 数式内の日本語文字を検出して\text{}で囲む
+        inner_content = re.sub(r'([ひらがなカタカナ漢字]+)', r'\\text{\1}', inner_content)
+        
         # 元の形式に戻す
         if math_content.startswith('$') and math_content.endswith('$'):
             return f'${inner_content}$'
         else:
             return inner_content
+    
     
     def fix_standalone_variables(self, text):
         """
@@ -434,14 +473,17 @@ class XlsxToTeXToPng:
             '%': '\\%',
             '#': '\\#',
             '~': '\\textasciitilde{}',
-            '^': '\\textasciicircum{}',
-            '_': '\\_',
             '{': '\\{',
             '}': '\\}',
         }
         
         for char, replacement in special_chars.items():
             protected_text = protected_text.replace(char, replacement)
+        
+        # ^ と _ は数式外でのみエスケープ（数式内ではそのまま使用）
+        # 数式外の ^ を \textasciicircum に変換
+        protected_text = re.sub(r'([^$]*?)\^([^$]*?)(?=\$|$)', r'\1\\textasciicircum{}\2', protected_text)
+        protected_text = re.sub(r'([^$]*?)_([^$]*?)(?=\$|$)', r'\1\\_\2', protected_text)
         
         return protected_text
     
@@ -474,14 +516,17 @@ class XlsxToTeXToPng:
             '%': '\\%',
             '#': '\\#',
             '~': '\\textasciitilde{}',
-            '^': '\\textasciicircum{}',
-            '_': '\\_',
             '{': '\\{',
             '}': '\\}',
         }
         
         for char, replacement in special_chars.items():
             temp_text = temp_text.replace(char, replacement)
+        
+        # ^ と _ は数式外でのみエスケープ（数式内ではそのまま使用）
+        # 数式外の ^ を \textasciicircum に変換
+        temp_text = re.sub(r'([^$]*?)\^([^$]*?)(?=\$|$)', r'\1\\textasciicircum{}\2', temp_text)
+        temp_text = re.sub(r'([^$]*?)_([^$]*?)(?=\$|$)', r'\1\\_\2', temp_text)
         
         # 保護した数式部分を復元
         for i, math_part in enumerate(math_parts):
@@ -516,7 +561,14 @@ class XlsxToTeXToPng:
             'rightarrow', 'leftrightarrow', 'Rightarrow', 'Leftrightarrow',
             'in', 'ni', 'subset', 'subseteq', 'supset', 'supseteq',
             'cup', 'cap', 'times', 'div', 'pm', 'mp', 'infty',
-            'quad', 'qquad', 'hspace', 'vspace'
+            'quad', 'qquad', 'hspace', 'vspace', 'ldots', 'cdots', 'vdots', 'ddots',
+            # LaTeXコマンド
+            'displaystyle', 'textstyle', 'scriptstyle', 'scriptscriptstyle',
+            'text', 'mathrm', 'mathbb', 'mathcal', 'mathsf', 'mathtt',
+            'mathit', 'mathbf', 'boldsymbol', 'vec', 'hat', 'bar',
+            'd',  # 微分のd
+            # 特殊文字のエスケープ
+            '%', '&', '#', '_', '{', '}', '$'
         ]
         
         protected_text = text
@@ -566,6 +618,7 @@ class XlsxToTeXToPng:
 \\usepackage{{varwidth}}
 \\usepackage[legacycolonsymbols]{{mathtools}}
 \\setmainfont{{{MAIN_FONT}}}
+\\renewcommand{{\\d}}{{\\displaystyle}}
 \\begin{{document}}
 \\begin{{varwidth}}{{\\textwidth}}
 {tex_content}
@@ -595,6 +648,13 @@ class XlsxToTeXToPng:
                 print(f"stdout: {e.stdout}")
                 print(f"stderr: {e.stderr}")
                 print("TeX Live または MiKTeX がインストールされ、PATHが通っているか確認してください。")
+                
+                # デバッグ用：問題のあるTeXファイルの内容を表示
+                print(f"\n問題のあるTeX内容:")
+                print(f"{'='*50}")
+                print(full_tex_content)
+                print(f"{'='*50}")
+                
                 return False
             except FileNotFoundError as e:
                 print(f"エラー: xelatexが見つかりません。")
@@ -714,18 +774,26 @@ class XlsxToTeXToPng:
                     continue
                 
                 # セルをTeXに変換
-                tex_content = self.cell_to_tex(cell)
-                if not tex_content:
+                try:
+                    tex_content = self.cell_to_tex(cell)
+                    if not tex_content:
+                        continue
+                    
+                    # 出力ファイル名を生成（行番号のみ）
+                    output_name = f"{row_idx+1}"
+                    output_path = output_folder / f"{output_name}.png"
+                    
+                    # TeXをPNGに変換（シート固有のサイズを使用）
+                    if self.convert_tex_to_png(tex_content, output_path, sheet_width, sheet_height):
+                        success_count += 1
+                        success_rows.add(row_idx + 1)
+                    else:
+                        print(f"  ✗ 行{row_idx+1}の変換に失敗: '{str(cell)[:50]}...'")
+                        
+                except Exception as e:
+                    print(f"  ✗ 行{row_idx+1}の処理中にエラー: {e}")
+                    print(f"    セル内容: '{str(cell)[:100]}...'")
                     continue
-                
-                # 出力ファイル名を生成（行番号のみ）
-                output_name = f"{row_idx+1}"
-                output_path = output_folder / f"{output_name}.png"
-                
-                # TeXをPNGに変換（シート固有のサイズを使用）
-                if self.convert_tex_to_png(tex_content, output_path, sheet_width, sheet_height):
-                    success_count += 1
-                    success_rows.add(row_idx + 1)
             
             # 完了メッセージの詳細化
             # この列でデータが存在するセルの総数を計算
