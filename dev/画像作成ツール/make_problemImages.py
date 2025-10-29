@@ -255,9 +255,6 @@ class XlsxToTeXToPng:
             print(f"警告: 数式の$記号が対応していません。自動修正します: '{text[:50]}...'")
             text = text + '$'
         
-        # 空の数式（$$）をチェックして修正（連続する$のみ）
-        text = re.sub(r'\$\$', '$\\text{ }$', text)
-        
         return text
 
     def process_cell_content(self, text):
@@ -390,10 +387,14 @@ class XlsxToTeXToPng:
             str: 修正されたテキスト
         """
         # 一般的な変数名のリスト
-        common_variables = ['x', 'y', 'z', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w']
+        common_variables = ['x', 'y', 'z', 'a', 'b', 'c', 'd', 'e', 'f', 'h', 'i', 'j', 'k', 'l', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w']
         
-        # 関数名として使われる可能性が高い文字を除外
-        function_names = ['f', 'g', 'h']
+        # 関数名として使われる可能性が高い文字（条件付きで変換）
+        function_names = ['f', 'h']
+        
+        # 単位として使われる文字（変換しない）
+        # g: グラム、m: メートルなど
+        unit_names = ['g', 'm']
         
         # 数式部分を一時的に保護
         math_parts = []
@@ -407,15 +408,19 @@ class XlsxToTeXToPng:
         
         # 数式外の部分で変数を処理
         for var in common_variables:
-            # 関数名として使われる可能性が高い場合は除外
+            # 単位として使われる文字は変換しない
+            if var in unit_names:
+                continue
+            
+            # 関数名として使われる可能性が高い場合は条件付きで処理
             if var in function_names:
                 # より厳密な条件：前が英字でない、後が英字・数字・括弧でない
                 pattern = rf'(?<![A-Za-z0-9\\$]){var}(?![A-Za-z0-9\\$\(])'
+                protected_text = re.sub(pattern, f'${var}$', protected_text)
             else:
                 # 一般的な変数：前が英字でない、後が英字・数字でない
                 pattern = rf'(?<![A-Za-z0-9\\$]){var}(?![A-Za-z0-9\\$])'
-            
-            protected_text = re.sub(pattern, f'${var}$', protected_text)
+                protected_text = re.sub(pattern, f'${var}$', protected_text)
         
         # 保護した数式部分を復元
         for i, math_part in enumerate(math_parts):
@@ -566,6 +571,7 @@ class XlsxToTeXToPng:
             'displaystyle', 'textstyle', 'scriptstyle', 'scriptscriptstyle',
             'text', 'mathrm', 'mathbb', 'mathcal', 'mathsf', 'mathtt',
             'mathit', 'mathbf', 'boldsymbol', 'vec', 'hat', 'bar',
+            'par',  # 段落区切り
             'd',  # 微分のd
             # 特殊文字のエスケープ
             '%', '&', '#', '_', '{', '}', '$'

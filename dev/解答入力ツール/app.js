@@ -17,6 +17,7 @@ class AnswerInputTool {
         this.totalRows = 1;
         this.currentAnswer = '';
         this.currentNotes = '';
+        this.previousRow = 1; // 前回の行番号を追跡（ハイライト表示用）
         
         this.initializeEventListeners();
     }
@@ -53,6 +54,15 @@ class AnswerInputTool {
 
         document.getElementById('endRow').addEventListener('change', (e) => {
             this.endRow = parseInt(e.target.value) || 1;
+        });
+
+        // 前後移動ボタン
+        document.getElementById('prevRowBtn').addEventListener('click', () => {
+            this.moveToPreviousRow();
+        });
+
+        document.getElementById('nextRowBtn').addEventListener('click', () => {
+            this.moveToNextRowButton();
         });
     }
 
@@ -221,8 +231,21 @@ class AnswerInputTool {
     }
 
     displayCurrentRow() {
+        const currentRowDisplay = document.getElementById('currentRowDisplay');
+        
+        // 行が変わった場合にハイライト表示（最初の表示時を除く）
+        if (this.currentRow !== this.previousRow && this.previousRow !== 1) {
+            // ハイライトクラスを追加
+            currentRowDisplay.classList.add('highlight');
+            
+            // アニメーション終了後にクラスを削除
+            setTimeout(() => {
+                currentRowDisplay.classList.remove('highlight');
+            }, 400);
+        }
+        
         // 進捗表示を更新（処理済みの行数を計算）
-        document.getElementById('currentRowDisplay').textContent = `${this.currentRow}行目`;
+        currentRowDisplay.textContent = `${this.currentRow}行目`;
         const processedRows = this.calculateProcessedRows();
         document.getElementById('progressText').textContent = `${processedRows} / ${this.totalRows}`;
         
@@ -240,6 +263,12 @@ class AnswerInputTool {
         
         // ボタンの状態をリセット
         this.resetButtonStates();
+        
+        // ナビゲーションボタンの有効/無効を更新
+        this.updateNavigationButtons();
+        
+        // 前回の行番号を更新
+        this.previousRow = this.currentRow;
     }
 
     shouldSkipCurrentRow() {
@@ -430,20 +459,40 @@ class AnswerInputTool {
             if (!worksheet[answerCellAddress]) {
                 worksheet[answerCellAddress] = {};
             }
+            
+            // 解答が変更されたかどうかを判定
+            const oldAnswer = worksheet[answerCellAddress].v || '';
+            const answerChanged = oldAnswer !== newAnswer;
+            
             worksheet[answerCellAddress].v = newAnswer;
             worksheet[answerCellAddress].t = 's'; // string type
             
-            // K列に備考を書き込み（入力がある場合のみ）
+            // K列に備考を書き込み
             const notesCellAddress = `K${this.currentRow}`;
+            const existingNotes = worksheet[notesCellAddress] ? (worksheet[notesCellAddress].v || '') : '';
+            
             if (newNotes) {
+                // 新しい備考が入力されている場合、そのまま使用
                 if (!worksheet[notesCellAddress]) {
                     worksheet[notesCellAddress] = {};
                 }
                 worksheet[notesCellAddress].v = newNotes;
                 worksheet[notesCellAddress].t = 's'; // string type
                 console.log(`${this.currentRow}行目の備考を更新: "${newNotes}"`);
+            } else if (answerChanged && existingNotes) {
+                // 解答が変更されていて、新しい備考が入力されていない場合、既存の備考に「修正」を追加
+                if (!worksheet[notesCellAddress]) {
+                    worksheet[notesCellAddress] = {};
+                }
+                const updatedNotes = existingNotes + '修正';
+                worksheet[notesCellAddress].v = updatedNotes;
+                worksheet[notesCellAddress].t = 's'; // string type
+                console.log(`${this.currentRow}行目の備考を更新: "${updatedNotes}"（既存: "${existingNotes}" + "修正"）`);
+            } else if (!answerChanged && existingNotes) {
+                // 解答が変更されていない場合、既存の備考はそのまま保持
+                // （何もしない）
             } else if (worksheet[notesCellAddress]) {
-                // 備考が空の場合、既存の値をクリア
+                // 備考が空で、既存のセルがある場合はクリア
                 delete worksheet[notesCellAddress];
                 console.log(`${this.currentRow}行目の備考をクリア`);
             }
@@ -471,6 +520,83 @@ class AnswerInputTool {
         
         this.currentRow = nextValidRow;
         this.displayCurrentRow();
+    }
+
+    moveToPreviousRow() {
+        // 前の有効な行を見つける（範囲内で）
+        if (this.currentRow <= this.startRow) {
+            return; // 範囲の先頭にいる場合は何もしない
+        }
+
+        // 現在の行より前の有効な行を探す
+        let previousValidRow = null;
+        for (let row = this.currentRow - 1; row >= this.startRow; row--) {
+            const cellAddress = `D${row}`;
+            if (!this.workbook || !this.workbook.Sheets['Ans']) {
+                break;
+            }
+            const worksheet = this.workbook.Sheets['Ans'];
+            const cell = worksheet[cellAddress];
+            
+            if (cell && cell.v !== undefined && cell.v !== null && cell.v !== '') {
+                previousValidRow = row;
+                break;
+            }
+        }
+
+        if (previousValidRow !== null && previousValidRow >= this.startRow) {
+            this.currentRow = previousValidRow;
+            this.displayCurrentRow();
+        }
+    }
+
+    moveToNextRowButton() {
+        // 次の有効な行を見つける（範囲内で）
+        if (this.currentRow >= this.endRow) {
+            return; // 範囲の終端にいる場合は何もしない
+        }
+
+        // 現在の行より後の有効な行を探す
+        const nextValidRow = this.findNextValidRow(this.currentRow + 1);
+        
+        if (nextValidRow <= this.endRow) {
+            this.currentRow = nextValidRow;
+            this.displayCurrentRow();
+        }
+    }
+
+    updateNavigationButtons() {
+        const prevBtn = document.getElementById('prevRowBtn');
+        const nextBtn = document.getElementById('nextRowBtn');
+
+        // 前のボタン: 現在の行が開始行より大きい場合、かつ前の有効な行が存在する場合に有効
+        let hasPreviousRow = false;
+        if (this.currentRow > this.startRow) {
+            for (let row = this.currentRow - 1; row >= this.startRow; row--) {
+                if (!this.workbook || !this.workbook.Sheets['Ans']) {
+                    break;
+                }
+                const worksheet = this.workbook.Sheets['Ans'];
+                const cellAddress = `D${row}`;
+                const cell = worksheet[cellAddress];
+                
+                if (cell && cell.v !== undefined && cell.v !== null && cell.v !== '') {
+                    hasPreviousRow = true;
+                    break;
+                }
+            }
+        }
+        prevBtn.disabled = !hasPreviousRow;
+
+        // 次のボタン: 現在の行が終了行より小さい場合、かつ次の有効な行が存在する場合に有効
+        let hasNextRow = false;
+        if (this.currentRow < this.endRow) {
+            const nextValidRow = this.findNextValidRow(this.currentRow + 1);
+            if (nextValidRow <= this.endRow) {
+                hasNextRow = true;
+            }
+        }
+        nextBtn.disabled = !hasNextRow;
     }
 
     showCompletionDialog() {
@@ -530,6 +656,7 @@ class AnswerInputTool {
         this.endRow = 1;
         this.currentAnswer = '';
         this.currentNotes = '';
+        this.previousRow = 1;
         
         // フォームをリセット
         document.getElementById('zipFile').value = '';
@@ -559,10 +686,18 @@ class AnswerInputTool {
         switch (event.key) {
             case 'ArrowLeft':
                 event.preventDefault();
+                // キーリピートの場合は無視
+                if (event.repeat) {
+                    return;
+                }
                 this.handleNeedCorrectionClick();
                 break;
             case 'ArrowRight':
                 event.preventDefault();
+                // キーリピートの場合は無視（連続で進まないようにする）
+                if (event.repeat) {
+                    return;
+                }
                 this.handleCorrectionDecision(false);
                 break;
         }
