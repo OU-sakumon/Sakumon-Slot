@@ -3,8 +3,10 @@
 ## 概要
 
 > [!NOTE]
+>
 >**開発団体**
 > 阪大作問サークル
+>
 >[@OU_sakumon](https://x.com/ou_sakumon?s=21)
 
 
@@ -87,5 +89,7 @@
 
 > [!NOTE]
 >**メイン開発者**
+>
 >Tanaka Mikihisa
->[@Mathmeganekun](https://x.com/mathmeganekun?s=11)
+>
+[@Mathmeganekun](https://x.com/mathmeganekun?s=11)

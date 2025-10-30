@@ -277,9 +277,6 @@ class XlsxToTeXToPng:
         # 正規表現で数式を検索して置換
         text = re.sub(r'\$[^$]+?\$', replace_math, text)
         
-        # 数式でない部分で変数が単独で存在する場合の補正
-        text = self.fix_standalone_variables(text)
-        
         # テキスト部分をエスケープ（数式部分はそのまま）
         result = self.escape_text_parts(text)
         
@@ -374,60 +371,6 @@ class XlsxToTeXToPng:
             return f'${inner_content}$'
         else:
             return inner_content
-    
-    
-    def fix_standalone_variables(self, text):
-        """
-        数式外で単独で存在する変数を適切に処理する
-        
-        Args:
-            text (str): 処理するテキスト
-        
-        Returns:
-            str: 修正されたテキスト
-        """
-        # 一般的な変数名のリスト
-        common_variables = ['x', 'y', 'z', 'a', 'b', 'c', 'd', 'e', 'f', 'h', 'i', 'j', 'k', 'l', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w']
-        
-        # 関数名として使われる可能性が高い文字（条件付きで変換）
-        function_names = ['f', 'h']
-        
-        # 単位として使われる文字（変換しない）
-        # g: グラム、m: メートルなど
-        unit_names = ['g', 'm']
-        
-        # 数式部分を一時的に保護
-        math_parts = []
-        protected_text = text
-        
-        # 数式部分を抽出して保護
-        for i, match in enumerate(re.finditer(r'\$[^$]+\$', text)):
-            placeholder = f"__MATH_PLACEHOLDER_{i}__"
-            math_parts.append(match.group(0))
-            protected_text = protected_text.replace(match.group(0), placeholder, 1)
-        
-        # 数式外の部分で変数を処理
-        for var in common_variables:
-            # 単位として使われる文字は変換しない
-            if var in unit_names:
-                continue
-            
-            # 関数名として使われる可能性が高い場合は条件付きで処理
-            if var in function_names:
-                # より厳密な条件：前が英字でない、後が英字・数字・括弧でない
-                pattern = rf'(?<![A-Za-z0-9\\$]){var}(?![A-Za-z0-9\\$\(])'
-                protected_text = re.sub(pattern, f'${var}$', protected_text)
-            else:
-                # 一般的な変数：前が英字でない、後が英字・数字でない
-                pattern = rf'(?<![A-Za-z0-9\\$]){var}(?![A-Za-z0-9\\$])'
-                protected_text = re.sub(pattern, f'${var}$', protected_text)
-        
-        # 保護した数式部分を復元
-        for i, math_part in enumerate(math_parts):
-            placeholder = f"__MATH_PLACEHOLDER_{i}__"
-            protected_text = protected_text.replace(placeholder, math_part)
-        
-        return protected_text
     
     def escape_text_parts(self, text):
         """
