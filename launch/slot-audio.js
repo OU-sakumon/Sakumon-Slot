@@ -85,6 +85,73 @@ class SlotAudio {
     }
     
     /**
+     * zipから読み込んだ音声を再読み込み（zip読み込み後に呼ばれる）
+     */
+    reloadAudioFromZip() {
+        console.log('=== zipから読み込んだ音声を再読み込みします ===');
+        
+        // zipから読み込まれた音声がある場合、再読み込み
+        const soundFilesToReload = {};
+        let reloadCount = 0;
+        
+        if (window.slotStopAudioUrl) {
+            soundFilesToReload.stop = window.slotStopAudioUrl;
+            reloadCount++;
+            console.log(`✓ slot_stop.mp3を再読み込み: ${window.slotStopAudioUrl}`);
+        } else {
+            console.log('✗ slot_stop.mp3が見つかりません');
+        }
+        
+        if (window.answerCorrectAudioUrl) {
+            soundFilesToReload.answerCorrect = window.answerCorrectAudioUrl;
+            reloadCount++;
+            console.log(`✓ answer_correct.mp3を再読み込み: ${window.answerCorrectAudioUrl}`);
+        } else {
+            console.log('✗ answer_correct.mp3が見つかりません');
+        }
+        
+        if (window.answerMissAudioUrl) {
+            soundFilesToReload.answerMiss = window.answerMissAudioUrl;
+            reloadCount++;
+            console.log(`✓ answer_miss.mp3を再読み込み: ${window.answerMissAudioUrl}`);
+        } else {
+            console.log('✗ answer_miss.mp3が見つかりません');
+        }
+        
+        console.log(`再読み込み対象: ${reloadCount}個の音声ファイル`);
+        
+        // 該当する音声を再読み込み
+        Object.keys(soundFilesToReload).forEach(key => {
+            try {
+                console.log(`${key}音声を読み込み中...`);
+                const audio = new Audio(soundFilesToReload[key]);
+                audio.preload = 'auto';
+                audio.volume = this.masterVolume;
+                
+                audio.addEventListener('error', (e) => {
+                    console.error(`✗ ${key}音声の再読み込みに失敗しました:`, e);
+                    console.error(`  URL: ${soundFilesToReload[key]}`);
+                });
+                
+                audio.addEventListener('loadeddata', () => {
+                    console.log(`✓ ${key}音声の再読み込みが完了しました`);
+                });
+                
+                audio.addEventListener('canplaythrough', () => {
+                    console.log(`✓ ${key}音声の再生準備が完了しました`);
+                });
+                
+                this.preloadedSounds[key] = audio;
+                console.log(`${key}音声オブジェクトを更新しました`);
+            } catch (error) {
+                console.error(`✗ ${key}音声の再読み込みでエラーが発生しました:`, error);
+            }
+        });
+        
+        console.log('=== 音声再読み込み処理完了 ===');
+    }
+    
+    /**
      * 基本的な音を生成
      * @param {number} frequency - 周波数（Hz）
      * @param {number} duration - 持続時間（秒）

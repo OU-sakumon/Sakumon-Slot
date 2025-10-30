@@ -230,6 +230,12 @@ class SlotUI {
         // データの初期化
         this.initializeData();
         
+        // zipから読み込んだ音声を再読み込み（zip読み込み後に実行）
+        if (this.audio) {
+            console.log('=== SlotUI.initialize()で音声を再読み込み ===');
+            this.audio.reloadAudioFromZip();
+        }
+        
         // ロジック層からシンボルを動的生成（データ初期化後に実行）
         this.syncGeometry();
         this.initializeEventListeners();

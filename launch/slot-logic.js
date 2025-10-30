@@ -183,21 +183,74 @@ class SlotLogic {
             answerMiss: null
         };
         
+        // デバッグ用：zip内の全ファイル名をログ出力
+        console.log('=== Zipファイル内の全ファイル一覧 ===');
+        const allFiles = [];
+        for (const [filename, zipEntry] of Object.entries(zip.files)) {
+            if (!zipEntry.dir) {
+                allFiles.push(filename);
+                console.log(`  - ${filename}`);
+            }
+        }
+        console.log(`合計 ${allFiles.length} ファイル`);
+        
+        // mp3ファイルを全て検索
+        console.log('=== MP3ファイル検索中 ===');
+        const mp3Files = [];
         for (const [filename, zipEntry] of Object.entries(zip.files)) {
             // ディレクトリはスキップ
             if (zipEntry.dir) continue;
             
             const lowerFilename = filename.toLowerCase();
             
-            // 各音声ファイルを検索
-            if (lowerFilename.includes('slot_stop.mp3')) {
-                audioFiles.slotStop = zipEntry;
-            } else if (lowerFilename.includes('answer_correct.mp3')) {
-                audioFiles.answerCorrect = zipEntry;
-            } else if (lowerFilename.includes('answer_miss.mp3')) {
-                audioFiles.answerMiss = zipEntry;
+            // mp3ファイルを全て収集
+            if (lowerFilename.endsWith('.mp3')) {
+                mp3Files.push(filename);
+                console.log(`MP3ファイル発見: ${filename}`);
             }
         }
+        
+        // 各音声ファイルを検索（より柔軟な検索条件）
+        for (const [filename, zipEntry] of Object.entries(zip.files)) {
+            // ディレクトリはスキップ
+            if (zipEntry.dir) continue;
+            
+            const lowerFilename = filename.toLowerCase();
+            // パスを正規化（先頭の/を削除、バックスラッシュをスラッシュに変換）
+            const normalizedPath = lowerFilename.replace(/\\/g, '/').replace(/^\/+/, '');
+            // ファイル名のみを取得（パスから最後の部分を抽出）
+            const pathParts = normalizedPath.split('/');
+            const fileName = pathParts[pathParts.length - 1];
+            
+            // slot_stop.mp3 の検索（より柔軟）
+            if (!audioFiles.slotStop) {
+                if (fileName.includes('slot') && fileName.includes('stop') && fileName.endsWith('.mp3')) {
+                    audioFiles.slotStop = zipEntry;
+                    console.log(`✓ slot_stop.mp3を発見: ${filename}`);
+                }
+            }
+            
+            // answer_correct.mp3 の検索（より柔軟）
+            if (!audioFiles.answerCorrect) {
+                if (fileName.includes('answer') && fileName.includes('correct') && fileName.endsWith('.mp3')) {
+                    audioFiles.answerCorrect = zipEntry;
+                    console.log(`✓ answer_correct.mp3を発見: ${filename}`);
+                }
+            }
+            
+            // answer_miss.mp3 の検索（より柔軟）
+            if (!audioFiles.answerMiss) {
+                if (fileName.includes('answer') && fileName.includes('miss') && fileName.endsWith('.mp3')) {
+                    audioFiles.answerMiss = zipEntry;
+                    console.log(`✓ answer_miss.mp3を発見: ${filename}`);
+                }
+            }
+        }
+        
+        console.log('=== 検索結果 ===');
+        console.log(`slotStop: ${audioFiles.slotStop ? '見つかりました' : '見つかりませんでした'}`);
+        console.log(`answerCorrect: ${audioFiles.answerCorrect ? '見つかりました' : '見つかりませんでした'}`);
+        console.log(`answerMiss: ${audioFiles.answerMiss ? '見つかりました' : '見つかりませんでした'}`);
         
         // 各音声ファイルを読み込み
         for (const [audioType, zipEntry] of Object.entries(audioFiles)) {
@@ -211,15 +264,28 @@ class SlotLogic {
                     // グローバルに保存（SlotAudioクラスで使用）
                     if (audioType === 'slotStop') {
                         window.slotStopAudioUrl = blobUrl;
+                        console.log(`✓ slot_stop.mp3を読み込みました: ${blobUrl}`);
                     } else if (audioType === 'answerCorrect') {
                         window.answerCorrectAudioUrl = blobUrl;
+                        console.log(`✓ answer_correct.mp3を読み込みました: ${blobUrl}`);
                     } else if (audioType === 'answerMiss') {
                         window.answerMissAudioUrl = blobUrl;
+                        console.log(`✓ answer_miss.mp3を読み込みました: ${blobUrl}`);
                     }
                 } catch (error) {
-                    console.error(`${audioType}の読み込みエラー:`, error);
+                    console.error(`✗ ${audioType}の読み込みエラー:`, error);
                 }
+            } else {
+                console.log(`✗ ${audioType}が見つかりませんでした`);
             }
+        }
+        
+        // zipから読み込んだ音声をSlotAudioに反映（既に初期化済みの場合）
+        if (window.slotUI && window.slotUI.audio) {
+            console.log('=== SlotAudioに音声を反映中 ===');
+            window.slotUI.audio.reloadAudioFromZip();
+        } else {
+            console.warn('SlotAudioが初期化されていません。音声の反映をスキップします。');
         }
     }
     
