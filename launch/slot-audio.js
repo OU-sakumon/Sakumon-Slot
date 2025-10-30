@@ -76,10 +76,6 @@ class SlotAudio {
             audio.preload = 'auto';
             audio.volume = this.masterVolume;
             
-            audio.addEventListener('canplaythrough', () => {
-                console.log(`${key}音声のプリロードが完了しました`);
-            });
-            
             audio.addEventListener('error', (e) => {
                 console.warn(`${key}音声のプリロードに失敗しました:`, e);
             });
@@ -234,7 +230,6 @@ class SlotAudio {
                 
                 this.heartMovingAudio.play().then(() => {
                     this.isHeartPlaying = true;
-                    console.log('ハート音のリピート再生を開始しました');
                 }).catch(error => {
                     console.warn('heart_moving.mp3の再生に失敗しました:', error);
                     this.isHeartPlaying = false;
@@ -251,7 +246,6 @@ class SlotAudio {
                 
                 this.heartMovingAudio.play().then(() => {
                     this.isHeartPlaying = true;
-                    console.log('ハート音のリピート再生を開始しました');
                 }).catch(error => {
                     console.warn('heart_moving.mp3の再生に失敗しました:', error);
                     this.isHeartPlaying = false;
@@ -272,7 +266,6 @@ class SlotAudio {
                 this.heartMovingAudio.pause();
                 this.heartMovingAudio.currentTime = 0;
                 this.isHeartPlaying = false;
-                console.log('ハート音のリピート再生を停止しました');
             } catch (error) {
                 console.warn('ハート音の停止に失敗しました:', error);
             }

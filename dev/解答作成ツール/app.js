@@ -106,8 +106,6 @@ class SlotProblemGenerator {
     }
 
     processFile(file) {
-        console.log('ファイルが処理されました:', file.name);
-
         // ファイル情報を表示
         const fileInfo = document.getElementById('fileInfo');
         const fileName = document.getElementById('fileName');
@@ -121,10 +119,8 @@ class SlotProblemGenerator {
         const reader = new FileReader();
         reader.onload = (e) => {
             try {
-                console.log('ファイルの読み込みを開始...');
                 const data = new Uint8Array(e.target.result);
                 this.workbook = XLSX.read(data, { type: 'array' });
-                console.log('ファイルが正常に読み込まれました');
                 this.updateStepStatus(1, 'success', 'ファイルが正常に読み込まれました');
                 
                 // 自動で検証を開始
@@ -164,19 +160,16 @@ class SlotProblemGenerator {
             return;
         }
 
-        console.log('ファイル構造の検証を開始...');
         this.updateStepStatus(2, 'info', 'ファイル構造を検証中...');
         
         const validationResult = this.checkWorkbookStructure();
         const resultsDiv = document.getElementById('validationResults');
         
         if (validationResult.valid) {
-            console.log('検証が成功しました');
             this.updateStepStatus(2, 'success', 'ファイル構造の検証が完了しました');
             this.enableStep(3);
             resultsDiv.innerHTML = '<div class="status success">✓ すべてのシートと列名が正しく設定されています</div>';
         } else {
-            console.log('検証エラー:', validationResult.errors);
             this.updateStepStatus(2, 'error', 'ファイル構造に問題があります');
             let errorHtml = '<div class="error-details"><h4>検証エラー:</h4><ul>';
             validationResult.errors.forEach(error => {
@@ -196,7 +189,6 @@ class SlotProblemGenerator {
         
         // シートの存在チェック
         const existingSheets = this.workbook.SheetNames;
-        console.log('存在するシート:', existingSheets);
         const missingSheets = requiredSheets.filter(sheet => !existingSheets.includes(sheet));
         
         if (missingSheets.length > 0) {
@@ -323,14 +315,12 @@ class SlotProblemGenerator {
             return;
         }
 
-        console.log('問題の生成を開始...');
         this.updateStepStatus(3, 'info', '問題を生成中...');
         
         try {
             const result = this.generateCombinations();
             this.problemsData = result.problems;
             
-            console.log(`問題の生成が完了しました: ${result.count}件`);
             this.updateStepStatus(3, 'success', `問題の生成が完了しました（${result.count}件）`);
             this.enableStep(4);
             
@@ -368,8 +358,6 @@ class SlotProblemGenerator {
         const lrPairs = this.loadConstraintPairs('LR');
         const crPairs = this.loadConstraintPairs('CR');
 
-        console.log('制約ペア:', { lcPairs: lcPairs.size, lrPairs: lrPairs.size, crPairs: crPairs.size });
-
         // 既存のAnsデータを読み込み
         const existingAnsData = this.loadExistingAnsData();
 
@@ -377,8 +365,6 @@ class SlotProblemGenerator {
         const lData = this.loadSheetData('Que_L');
         const cData = this.loadSheetData('Que_C');
         const rData = this.loadSheetData('Que_R');
-
-        console.log('シートデータ:', { lData: lData.length, cData: cData.length, rData: rData.length });
 
         const problems = [];
         let count = 0;
@@ -424,13 +410,6 @@ class SlotProblemGenerator {
                             this.setCellValue(ansSheet, `B${ansRow}`, String(j + 2)); // row_C
                             this.setCellValue(ansSheet, `C${ansRow}`, String(k + 2)); // row_R
                             this.setCellValue(ansSheet, `I${ansRow}`, problem.question); // 問題文
-                            
-                            console.log(`Ansシートの${ansRow}行目に問題を追加:`, {
-                                row_L: i + 2,
-                                row_C: j + 2,
-                                row_R: k + 2,
-                                question: problem.question
-                            });
                             
                             ansRow++;
                             count++;

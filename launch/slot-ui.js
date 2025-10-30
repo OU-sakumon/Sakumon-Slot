@@ -37,7 +37,6 @@ class VideoManager {
                 
                 // 動画終了時のイベントリスナーを追加
                 videoData.video.addEventListener('ended', () => {
-                    console.log('動画が終了しました');
                     this.hideVideo(videoData);
                     // 全ての動画が終了したら再生フラグをリセット
                     this.checkAllVideosEnded();
@@ -63,7 +62,6 @@ class VideoManager {
         
         if (allHidden) {
             this.isPlaying = false;
-            console.log('全ての動画が終了し、再生フラグをリセットしました');
         }
     }
     
@@ -73,7 +71,6 @@ class VideoManager {
     resetPlayedFlag() {
         this.hasPlayedOnce = false;
         this.isPlaying = false;
-        console.log('動画再生フラグをリセットしました');
     }
     
     /**
@@ -85,7 +82,6 @@ class VideoManager {
         });
         this.activeVideos.clear();
         this.isPlaying = false; // 再生フラグをリセット
-        console.log('全ての動画を停止しました');
     }
     
     /**
@@ -94,7 +90,6 @@ class VideoManager {
     playBackgroundVideo() {
         // すでに再生中の場合は何もしない
         if (this.isPlaying || this.hasPlayedOnce) {
-            console.log('動画は既に再生済み、またはスキップされました');
             return;
         }
         
@@ -114,7 +109,6 @@ class VideoManager {
     playOverlayVideo() {
         // 背景動画が再生されていない場合は何もしない
         if (!this.isPlaying) {
-            console.log('背景動画が再生されていないため、オーバーレイ動画をスキップ');
             return;
         }
         
@@ -131,7 +125,6 @@ class VideoManager {
     playTopOverlayVideo() {
         // 背景動画が再生されていない場合は何もしない
         if (!this.isPlaying) {
-            console.log('背景動画が再生されていないため、トップオーバーレイ動画をスキップ');
             return;
         }
         
@@ -158,7 +151,6 @@ class VideoManager {
         const playPromise = videoData.video.play();
         if (playPromise !== undefined) {
             playPromise.then(() => {
-                console.log('動画の再生を開始しました');
                 this.hasPlayedOnce = true; // 再生完了フラグを立てる
             }).catch(error => {
                 console.warn('動画の再生に失敗しました:', error);
@@ -180,8 +172,6 @@ class VideoManager {
         
         // コンテナを非表示
         videoData.container.style.display = 'none';
-        
-        console.log('動画を非表示にしました');
     }
 }
 
@@ -210,13 +200,8 @@ class SlotUI {
         this.startButton = document.getElementById('startButton');
         this.stopButton = document.getElementById('stopButton');
         this.scoreDisplay = document.getElementById('scoreDisplay');
-        // resultDisplayは削除済み
-        // this.questionDisplay = document.getElementById('questionDisplay'); // 削除済み
         this.answerChoices = document.getElementById('answerChoices');
         this.timeBonusDisplay = document.getElementById('timeBonusDisplay');
-        // this.timeRemaining = document.getElementById('timeRemaining'); // 削除済み
-        // this.totalQuestions = document.getElementById('totalQuestions'); // 削除済み
-        // this.consecutiveCorrect = document.getElementById('consecutiveCorrect'); // 削除済み
         
         
         // 状態管理
@@ -406,7 +391,6 @@ class SlotUI {
         if (this.gameTimer) {
             clearInterval(this.gameTimer);
             this.gameTimer = null;
-            console.log('既存のタイマーをクリアしました');
         }
         
         this.gameStarted = true;
@@ -446,10 +430,8 @@ class SlotUI {
         if (this.gameTimer) {
             clearInterval(this.gameTimer);
             this.gameTimer = null;
-            console.log('startCountdown: 既存のタイマーをクリアしました');
         }
         
-        console.log('startCountdown: 新しいタイマーを開始します');
         this.gameTimer = setInterval(() => {
             this.timeLeft--;
             
@@ -496,7 +478,6 @@ class SlotUI {
         if (this.gameTimer) {
             clearInterval(this.gameTimer);
             this.gameTimer = null;
-            console.log('endGameInterrupted: タイマーをクリアしました');
         }
         this.gameStarted = false;
         
@@ -532,7 +513,6 @@ class SlotUI {
         if (this.gameTimer) {
             clearInterval(this.gameTimer);
             this.gameTimer = null;
-            console.log('endGame: タイマーをクリアしました');
         }
         this.gameStarted = false;
         
@@ -972,8 +952,6 @@ class SlotUI {
         // ランク圏内チェック（プレイ中）
         this.checkRankingDuringGame();
         
-        // 結果表示は削除済み
-        
         // 選択肢の色を変更（非表示中に実行、画像パスで判定）
         const choiceButtons = this.answerChoices.querySelectorAll('.answer-choice');
         choiceButtons.forEach(button => {
@@ -1158,9 +1136,6 @@ class SlotUI {
      * @param {number} accuracyRate - 正答率
      */
     checkRankingEffect(accuracyRate) {
-        console.log('=== ランキング入りエフェクトチェック開始 ===');
-        console.log(`現在のスコア - 正解数: ${this.score.correctAnswers}, 連続正解数: ${this.score.maxConsecutive}`);
-        
         const popupContent = document.getElementById('resultPopupContent');
         const sparkles = document.getElementById('rankingSparkles');
         const rankingMessage = document.getElementById('rankingMessage');
@@ -1169,16 +1144,10 @@ class SlotUI {
         const isCorrectTop5 = this.ranking.isCorrectAnswersTop5(this.score.correctAnswers);
         const isConsecutiveTop5 = this.ranking.isConsecutiveAnswersTop5(this.score.maxConsecutive);
         
-        console.log(`ランクイン判定結果 - 正解数: ${isCorrectTop5}, 連続正解数: ${isConsecutiveTop5}`);
-        
         // どちらか一方でもランクインしていなければ演出なし
         if (!isCorrectTop5 && !isConsecutiveTop5) {
-            console.log('❌ ランクインしていないため、動画・エフェクトなし');
-            console.log('=== ランキング入りエフェクトチェック終了 ===');
             return;
         }
-        
-        console.log('✅ ランクイン確定！動画とエフェクトを再生します');
         
         // 実際のランクを計算するために一時的にエントリを追加してランクを取得
         let correctRank = null;
@@ -1223,19 +1192,15 @@ class SlotUI {
         // どちらか一方でも1位かどうかを判定
         const isFirst = (correctRank === 1) || (consecutiveRank === 1);
         
-        console.log(`実際のランク - 正解数: ${correctRank}, 連続正解数: ${consecutiveRank}, 1位判定: ${isFirst}`);
-        
         // ランキング入り動画を表示（新しい動画管理システムを使用）
         this.videoManager.playBackgroundVideo();
         
         if (isFirst) {
             // どちらか一方でも1位: トップランキング入りオーバーレイ動画を表示
             this.videoManager.playTopOverlayVideo();
-            console.log('🎬 トップ1位の動画を再生します (toprankin_overlay_animation.mp4)');
         } else {
             // 2～5位: 通常のランキング入りオーバーレイ動画を表示
             this.videoManager.playOverlayVideo();
-            console.log('🎬 トップ5位の動画を再生します (rankin_overlay_animation.mp4)');
         }
         
         // ランキング入り特別メッセージを表示
@@ -1261,8 +1226,6 @@ class SlotUI {
         
         // ランキング入り音を再生
         this.playRankingFanfare();
-        
-        console.log('=== ランキング入りエフェクトチェック終了 ===');
     }
     
     /**
@@ -1524,7 +1487,6 @@ class SlotUI {
         if (this.gameTimer) {
             clearInterval(this.gameTimer);
             this.gameTimer = null;
-            console.log('resetGameState: タイマーをクリアしました');
         }
         
         // 全てのアニメーションを停止
@@ -1543,8 +1505,6 @@ class SlotUI {
         this.currentQuestionData = null;
         this.currentQuestions = [null, null, null];
         this.finalPositions = [0, 0, 0];
-        
-        // UI要素をリセット（結果表示は削除済み）
         
         // 選択肢を非表示
         this.answerChoices.style.visibility = 'hidden';
@@ -1574,9 +1534,6 @@ class SlotUI {
         const popup = document.getElementById('rankingPopup');
         const correctAnswersRanking = document.getElementById('correctAnswersRanking');
         const consecutiveAnswersRanking = document.getElementById('consecutiveAnswersRanking');
-        
-        // 表示前に最新データを強制読み込み（クリア後は不要）
-        // this.ranking.refreshRankings(); // コメントアウト：クリア後に復活するのを防ぐ
         
         // ランキングデータを表示
         this.displayRanking(correctAnswersRanking, this.ranking.getCorrectAnswersRanking(), 'correctAnswers');
@@ -1659,9 +1616,6 @@ class SlotUI {
      */
     exportRankings() {
         try {
-            
-            // エクスポート前に最新データを強制読み込み（クリア後は不要）
-            // this.ranking.refreshRankings(); // コメントアウト：クリア後に復活するのを防ぐ
             
             // ランキングデータの存在確認（現在のメモリ上のデータで確認）
             const correctAnswers = this.ranking.getCorrectAnswersRanking();
@@ -1758,7 +1712,6 @@ class SlotUI {
                 
                 // ランキングシステムをリセット
                 this.ranking.clearRankings();
-                console.log('ランキングシステムをリセットしました');
                 
                 // 音響システムをリセット
                 if (this.audio) {
@@ -1799,7 +1752,6 @@ class SlotUI {
         if (this.gameTimer) {
             clearInterval(this.gameTimer);
             this.gameTimer = null;
-            console.log('returnToMenu: タイマーをクリアしました');
         }
         
         // 全てのアニメーションを停止
@@ -1821,8 +1773,6 @@ class SlotUI {
         this.stopButton.style.display = 'none';
         this.scoreDisplay.style.display = 'none';
         this.updateScoreDisplay();
-        
-        // 結果表示は削除済み
         
         // 選択肢を非表示
         this.answerChoices.style.visibility = 'hidden';

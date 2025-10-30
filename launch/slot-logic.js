@@ -39,7 +39,6 @@ class SlotLogic {
         this.isDataLoaded = false;
         
         // 初期化時はデータを読み込まない（アップロード後に読み込む）
-        console.log('SlotLogic初期化完了（画像ベース） - データのアップロードを待機中');
     }
     
     
@@ -50,8 +49,6 @@ class SlotLogic {
      */
     async loadFromZipFile(file) {
         try {
-            console.log('Zipファイルからデータを読み込み中:', file.name);
-            
             // Zipファイルを解凍
             const zip = await JSZip.loadAsync(file);
             
@@ -74,8 +71,6 @@ class SlotLogic {
             if (!excelFile) {
                 throw new Error('Zipファイル内にExcelファイルが見つかりません');
             }
-            
-            console.log('Excelファイルを発見:', excelFileName);
             
             // Excelファイルを読み込み
             const excelData = await excelFile.async('arraybuffer');
@@ -106,10 +101,6 @@ class SlotLogic {
             
             // データ読み込み完了
             this.isDataLoaded = true;
-            console.log('Zipファイルからのデータ読み込み完了');
-            console.log(`Ans: ${this.ans.length}件`);
-            console.log(`利用可能な画像 - Left: ${this.availableLeftRows.length}件, Center: ${this.availableCenterRows.length}件, Right: ${this.availableRightRows.length}件`);
-            console.log(`画像キャッシュ: ${this.imageCache.size}件`);
             
             return true;
             
@@ -126,8 +117,6 @@ class SlotLogic {
      * @returns {Promise<void>}
      */
     async loadImagesFromZip(zip) {
-        console.log('Zipファイルから画像を読み込み中...');
-        
         const imageFolders = [
             this.queLeftPath,
             this.queCenterPath,
@@ -175,16 +164,10 @@ class SlotLogic {
                 // キャッシュに保存
                 this.imageCache.set(normalizedPath, blobUrl);
                 loadedCount++;
-                
-                if (loadedCount % 50 === 0) {
-                    console.log(`画像読み込み中... ${loadedCount}件`);
-                }
             } catch (error) {
                 console.error(`画像読み込みエラー: ${filename}`, error);
             }
         }
-        
-        console.log(`画像読み込み完了: ${loadedCount}件`);
     }
     
     /**
@@ -193,8 +176,6 @@ class SlotLogic {
      * @returns {Promise<void>}
      */
     async loadAudioFromZip(zip) {
-        console.log('Zipファイルから音声ファイルを読み込み中...');
-        
         // 音声ファイルの検索（大文字小文字を区別しない）
         const audioFiles = {
             slotStop: null,
@@ -211,13 +192,10 @@ class SlotLogic {
             // 各音声ファイルを検索
             if (lowerFilename.includes('slot_stop.mp3')) {
                 audioFiles.slotStop = zipEntry;
-                console.log('slot_stop.mp3を発見:', filename);
             } else if (lowerFilename.includes('answer_correct.mp3')) {
                 audioFiles.answerCorrect = zipEntry;
-                console.log('answer_correct.mp3を発見:', filename);
             } else if (lowerFilename.includes('answer_miss.mp3')) {
                 audioFiles.answerMiss = zipEntry;
-                console.log('answer_miss.mp3を発見:', filename);
             }
         }
         
@@ -238,13 +216,9 @@ class SlotLogic {
                     } else if (audioType === 'answerMiss') {
                         window.answerMissAudioUrl = blobUrl;
                     }
-                    
-                    console.log(`${audioType}の読み込み完了`);
                 } catch (error) {
                     console.error(`${audioType}の読み込みエラー:`, error);
                 }
-            } else {
-                console.log(`${audioType}が見つかりませんでした（フォールバック: ./sounds/${audioType}.mp3を使用）`);
             }
         }
     }
@@ -256,8 +230,6 @@ class SlotLogic {
      */
     async loadFromExcelFile(file) {
         try {
-            console.log('Excelファイルからデータを読み込み中（画像ベース）:', file.name);
-            
             // ファイルを読み込み
             const arrayBuffer = await this.readFileAsArrayBuffer(file);
             
@@ -283,9 +255,6 @@ class SlotLogic {
             
             // データ読み込み完了
             this.isDataLoaded = true;
-            console.log('Excelファイルからのデータ読み込み完了（画像ベース）');
-            console.log(`Ans: ${this.ans.length}件`);
-            console.log(`利用可能な画像 - Left: ${this.availableLeftRows.length}件, Center: ${this.availableCenterRows.length}件, Right: ${this.availableRightRows.length}件`);
             
             return true;
             
@@ -394,8 +363,6 @@ class SlotLogic {
      */
     setDataFromJson(jsonData) {
         try {
-            console.log('JSONデータからデータを設定中（画像ベース）:', jsonData);
-            
             // Ansシートのデータを設定
             this.ans = jsonData.Ans || [];
             
@@ -414,13 +381,6 @@ class SlotLogic {
             }
             
             this.isDataLoaded = true;
-            
-            console.log('データ設定完了（画像ベース）:', {
-                Ans: this.ans.length,
-                availableLeftRows: this.availableLeftRows.length,
-                availableCenterRows: this.availableCenterRows.length,
-                availableRightRows: this.availableRightRows.length
-            });
             
         } catch (error) {
             console.error('JSONデータの設定に失敗しました:', error);
@@ -529,9 +489,6 @@ class SlotLogic {
         const answerData = this.ans[randomIndex];
         const ansRowNumber = randomIndex + 2; // Excelの行番号（ヘッダー行を考慮して+2）
         
-        console.log(`ランダム選択: Ans行番号 ${ansRowNumber} (インデックス ${randomIndex})`);
-        console.log('選択された解答データ:', answerData);
-        
         // 画像パスを生成してBlob URLを取得
         const leftImagePath = `${this.queLeftPath}${answerData.row_L}.png`;
         const centerImagePath = `${this.queCenterPath}${answerData.row_C}.png`;
@@ -540,11 +497,6 @@ class SlotLogic {
         const leftImageUrl = this.getImageUrl(leftImagePath);
         const centerImageUrl = this.getImageUrl(centerImagePath);
         const rightImageUrl = this.getImageUrl(rightImagePath);
-        
-        console.log('選択された問題画像パス:');
-        console.log('左:', leftImagePath, '→', leftImageUrl);
-        console.log('中央:', centerImagePath, '→', centerImageUrl);
-        console.log('右:', rightImagePath, '→', rightImageUrl);
         
         this.currentAnswer = answerData;
         this.currentAnsRowNumber = ansRowNumber; // 現在のAns行番号を記録
@@ -644,8 +596,6 @@ class SlotLogic {
         // 位置を計算（負の値）
         const position = topIndex * -this.symbolHeight;
         
-        console.log(`行番号→位置変換 (${reelType}): rowNumber=${targetRowNumber}, symbolIndex=${symbolIndex}, centerOffset=${centerOffset}, topIndex=${topIndex}, position=${position}px, symbolHeight=${this.symbolHeight}px`);
-        
         return position;
     }
     
@@ -686,8 +636,6 @@ class SlotLogic {
         
         const rowNumber = rowNumbers[symbolIndex];
         
-        console.log(`位置→行番号変換 (${reelType}): position=${position}, absPosition=${absPosition}, topIndex=${topIndex}, centerOffset=${centerOffset}, symbolIndex=${symbolIndex}, rowNumber=${rowNumber}, symbolHeight=${this.symbolHeight}`);
-        
         return rowNumber;
     }
     
@@ -723,11 +671,6 @@ class SlotLogic {
                 isCorrect: false
             }
         ];
-        
-        console.log('生成された選択肢画像パス:');
-        choices.forEach((choice, index) => {
-            console.log(`選択肢${index + 1}: ${choice.imagePath} → ${choice.imageUrl} (正解: ${choice.isCorrect})`);
-        });
         
         // 選択肢をシャッフル
         return this.shuffleArray(choices);
@@ -768,11 +711,6 @@ class SlotLogic {
         
         // 画像パスで判定
         const isCorrect = selectedImagePath === correctImagePath;
-        
-        console.log('解答判定:');
-        console.log('選択された画像:', selectedImagePath);
-        console.log('正解の画像:', correctImagePath);
-        console.log('判定結果:', isCorrect ? '正解' : '不正解');
         
         return {
             isCorrect: isCorrect,

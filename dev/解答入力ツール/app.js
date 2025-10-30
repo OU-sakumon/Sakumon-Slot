@@ -140,7 +140,6 @@ class AnswerInputTool {
             }
         }
         
-        console.log(`問題画像: ${Object.keys(this.images.questions).length}個, 解答画像: ${Object.keys(this.images.answers).length}個を読み込みました`);
     }
 
     showRangeSection() {
@@ -154,8 +153,6 @@ class AnswerInputTool {
             document.getElementById('endRow').value = maxRow;
             document.getElementById('endRow').max = maxRow;
             this.endRow = maxRow;
-            
-            console.log(`D列にデータが含まれる最大行: ${maxRow}`);
         }
     }
 
@@ -177,7 +174,6 @@ class AnswerInputTool {
                 }
             }
             
-            console.log(`シート全体の最大行: ${sheetMaxRow}, D列データの最大行: ${maxRow}`);
         } else {
             // シート範囲が不明な場合は、D列のセルを直接検索
             for (const cellAddress in worksheet) {
@@ -412,8 +408,6 @@ class AnswerInputTool {
     }
 
     handleCorrectionDecision(needsCorrection) {
-        console.log(`修正判定: ${needsCorrection ? '必要あり' : 'なし'}`);
-        
         if (needsCorrection) {
             // 修正が必要な場合、テキストエディターを表示
             const textEditor = document.getElementById('textEditor');
@@ -425,7 +419,6 @@ class AnswerInputTool {
                 document.getElementById('notesInput').value = this.currentNotes; // 現在の備考を設定
                 answerInput.focus();
                 answerInput.select();
-                console.log('テキストエディターを表示しました');
             } else {
                 console.error('テキストエディター要素が見つかりません');
             }
@@ -437,7 +430,6 @@ class AnswerInputTool {
             document.getElementById('noCorrectionBtn').classList.remove('active');
         } else {
             // 修正不要な場合、次の行へ
-            console.log('修正不要のため次の行へ');
             this.moveToNextRow();
         }
     }
@@ -478,7 +470,6 @@ class AnswerInputTool {
                 }
                 worksheet[notesCellAddress].v = newNotes;
                 worksheet[notesCellAddress].t = 's'; // string type
-                console.log(`${this.currentRow}行目の備考を更新: "${newNotes}"`);
             } else if (answerChanged && existingNotes) {
                 // 解答が変更されていて、新しい備考が入力されていない場合、既存の備考に「修正」を追加
                 if (!worksheet[notesCellAddress]) {
@@ -487,17 +478,13 @@ class AnswerInputTool {
                 const updatedNotes = existingNotes + '修正';
                 worksheet[notesCellAddress].v = updatedNotes;
                 worksheet[notesCellAddress].t = 's'; // string type
-                console.log(`${this.currentRow}行目の備考を更新: "${updatedNotes}"（既存: "${existingNotes}" + "修正"）`);
             } else if (!answerChanged && existingNotes) {
                 // 解答が変更されていない場合、既存の備考はそのまま保持
                 // （何もしない）
             } else if (worksheet[notesCellAddress]) {
                 // 備考が空で、既存のセルがある場合はクリア
                 delete worksheet[notesCellAddress];
-                console.log(`${this.currentRow}行目の備考をクリア`);
             }
-            
-            console.log(`${this.currentRow}行目の解答を更新: "${newAnswer}"`);
             
             // 次の行へ
             this.moveToNextRow();

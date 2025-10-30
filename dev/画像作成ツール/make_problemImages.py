@@ -651,16 +651,7 @@ class XlsxToTeXToPng:
             except subprocess.CalledProcessError as e:
                 print(f"エラー: xelatexの実行に失敗しました。")
                 print(f"エラー詳細: {e}")
-                print(f"stdout: {e.stdout}")
-                print(f"stderr: {e.stderr}")
                 print("TeX Live または MiKTeX がインストールされ、PATHが通っているか確認してください。")
-                
-                # デバッグ用：問題のあるTeXファイルの内容を表示
-                print(f"\n問題のあるTeX内容:")
-                print(f"{'='*50}")
-                print(full_tex_content)
-                print(f"{'='*50}")
-                
                 return False
             except FileNotFoundError as e:
                 print(f"エラー: xelatexが見つかりません。")

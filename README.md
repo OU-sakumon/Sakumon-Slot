@@ -2,10 +2,17 @@
 
 ## 概要
 
+> [!NOTE]
+>**開発団体**
+> 阪大作問サークル
+>[@OU_sakumon](https://x.com/ou_sakumon?s=21)
+
+
 阪大作問サークルが開発した、パーツを組み合わせてできた問題を解答するスロットマシンゲームです。
 プレイするには、問題ファイルを作成する必要があります。
 問題の作成に関する便利なツールを用意しています。詳しくは`docs/マニュアル.md`をご覧ください。
-問題ファイルのサンプルとして、`サンプル問題.zip`を準備しています。これをアップロードすると、サンプル問題でプレイができます。
+問題ファイルのサンプルも準備しています。
+
 
 ## 特徴
 
@@ -22,16 +29,19 @@
 
 **スロット**: https://ou-sakumon.github.io/Sakumon-Slot/launch/index.html
 
+**ツール使用手順** https://ou-sakumon.github.io/Sakumon-Slot/docs/index.html
+
 **解答作成ツール**: https://ou-sakumon.github.io/Sakumon-Slot/dev/解答作成ツール/index.html
 
 **解答入力ツール**: https://ou-sakumon.github.io/Sakumon-Slot/dev/解答入力ツール/index.html
 
+**解答合体ツール**: https://ou-sakumon.github.io/Sakumon-Slot/dev/解答合体ツール/index.html
 
 ## 使用方法
 
 1. **Zipファイルの準備**: 
-   - 問題と画像をまとめた`zip`ファイルの作成
-   - 使い方・作成ツールは`docs/マニュアル.md`をご覧ください。
+   - 問題と画像をまとめた`zip`ファイルの作成。
+   - 使い方や作成手順は`docs/マニュアル.md`をご覧ください。
 
 2. **アップロード**: 
    - スロットゲームを開く
@@ -73,3 +83,9 @@
 
 
 *このプロジェクトは教育目的で開発されたオープンソースソフトウェアです。*
+
+
+> [!NOTE]
+>**メイン開発者**
+>Tanaka Mikihisa
+>[@Mathmeganekun](https://x.com/mathmeganekun?s=11)
