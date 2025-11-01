@@ -34,6 +34,7 @@ class SlotLogic {
         this.currentAnswer = null; // 現在の問題の解答データ
         this.recentQuestions = []; // 最近使用した問題のインデックス（重複回避用）
         this.maxRecentQuestions = 3; // 最近使用した問題の最大保持数
+        this.timeLimit = 60; // 制限時間（秒）
         
         // データ読み込み状態
         this.isDataLoaded = false;
@@ -820,6 +821,14 @@ class SlotLogic {
     }
     
     /**
+     * 制限時間を取得
+     * @returns {number} 制限時間（秒）
+     */
+    getTimeLimit() {
+        return this.timeLimit;
+    }
+    
+    /**
      * デバッグ用：現在の設定を取得（画像ベース）
      * @returns {Object} 設定情報
      */
@@ -839,7 +848,8 @@ class SlotLogic {
             symbolsPerReel: this.symbolsPerReel,
             spinSpeed: this.spinSpeed,
             visibleRows: this.visibleRows,
-            fullCycleLength: this.getFullCycleLength()
+            fullCycleLength: this.getFullCycleLength(),
+            timeLimit: this.timeLimit
         };
     }
     

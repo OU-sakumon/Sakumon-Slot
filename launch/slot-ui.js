@@ -89,7 +89,7 @@ class VideoManager {
      */
     playBackgroundVideo() {
         // すでに再生中の場合は何もしない
-        if (this.isPlaying || this.hasPlayedOnce) {
+        if (this.isPlaying) {
             return;
         }
         
@@ -107,11 +107,6 @@ class VideoManager {
      * オーバーレイ動画を再生
      */
     playOverlayVideo() {
-        // 背景動画が再生されていない場合は何もしない
-        if (!this.isPlaying) {
-            return;
-        }
-        
         const videoData = this.videoElements.overlay;
         if (videoData.container && videoData.video) {
             this.showVideo(videoData);
@@ -123,11 +118,6 @@ class VideoManager {
      * 一位オーバーレイ動画を再生
      */
     playTopOverlayVideo() {
-        // 背景動画が再生されていない場合は何もしない
-        if (!this.isPlaying) {
-            return;
-        }
-        
         const videoData = this.videoElements.topOverlay;
         if (videoData.container && videoData.video) {
             this.showVideo(videoData);
@@ -202,6 +192,7 @@ class SlotUI {
         this.scoreDisplay = document.getElementById('scoreDisplay');
         this.answerChoices = document.getElementById('answerChoices');
         this.timeBonusDisplay = document.getElementById('timeBonusDisplay');
+        this.preGameMenu = document.querySelector('.pre-game-menu');
         
         
         // 状態管理
@@ -214,7 +205,7 @@ class SlotUI {
 		this.hasFinalizedQuestion = false; // finalizeQuestionの一度きり実行制御
         this.score = { totalQuestions: 0, consecutiveCorrect: 0, correctAnswers: 0, maxConsecutive: 0 };
         this.gameTimer = null;
-        this.timeLeft = 120; // 120秒
+        this.timeLeft = 60; // 60秒
         this.gameStarted = false;
         
         // ランクイン音再生フラグ（1回のみ再生のため）
@@ -406,7 +397,7 @@ class SlotUI {
         
         // ゲーム状態をリセット
         this.score = { totalQuestions: 0, consecutiveCorrect: 0, correctAnswers: 0, maxConsecutive: 0 };
-        this.timeLeft = 120;
+        this.timeLeft = 60;
         this.hasPlayedRankinGako = false; // ランクイン音再生フラグをリセット
         
         
@@ -419,6 +410,11 @@ class SlotUI {
         this.stopButton.style.display = 'inline-block';
         this.scoreDisplay.style.display = 'block';
         this.updateScoreDisplay();
+        
+        // スタート前のメニューを非表示
+        if (this.preGameMenu) {
+            this.preGameMenu.style.display = 'none';
+        }
         
         
         // カウントダウンタイマー開始
@@ -505,6 +501,11 @@ class SlotUI {
         this.stopButton.style.display = 'none';
         this.scoreDisplay.style.display = 'none';
         
+        // スタート前のメニューを表示
+        if (this.preGameMenu) {
+            this.preGameMenu.style.display = 'flex';
+        }
+        
         // 選択肢を非表示
         this.answerChoices.style.visibility = 'hidden';
         this.answerChoices.innerHTML = '';
@@ -540,6 +541,11 @@ class SlotUI {
         this.startButton.textContent = '再スタート';
         this.stopButton.style.display = 'none';
         this.scoreDisplay.style.display = 'none';
+        
+        // スタート前のメニューを表示（ゲーム終了後は再スタート画面なので非表示のまま）
+        if (this.preGameMenu) {
+            this.preGameMenu.style.display = 'none';
+        }
         
         
     }
@@ -1198,14 +1204,14 @@ class SlotUI {
         // どちらか一方でも1位かどうかを判定
         const isFirst = (correctRank === 1) || (consecutiveRank === 1);
         
-        // ランキング入り動画を表示（新しい動画管理システムを使用）
-        this.videoManager.playBackgroundVideo();
-        
+        // ランキング入り動画を表示
         if (isFirst) {
-            // どちらか一方でも1位: トップランキング入りオーバーレイ動画を表示
+            // どちらか一方でも1位: トップランキング入りオーバーレイ動画を表示（toprankin_overlay_animation.mp4）
+            this.videoManager.playBackgroundVideo();
             this.videoManager.playTopOverlayVideo();
         } else {
-            // 2～5位: 通常のランキング入りオーバーレイ動画を表示
+            // 2～5位: 通常のランキング入りオーバーレイ動画を表示（rankin_overlay_animation.mp4）
+            this.videoManager.playBackgroundVideo();
             this.videoManager.playOverlayVideo();
         }
         
@@ -1486,7 +1492,7 @@ class SlotUI {
         // ゲーム状態をリセット
         this.gameStarted = false;
         this.score = { totalQuestions: 0, consecutiveCorrect: 0, correctAnswers: 0, maxConsecutive: 0 };
-        this.timeLeft = 120;
+        this.timeLeft = 60;
         this.hasPlayedRankinGako = false; // ランクイン音再生フラグをリセット
         
         // タイマーをクリア
@@ -1531,6 +1537,11 @@ class SlotUI {
         this.scoreDisplay.style.display = 'none';
         this.updateScoreDisplay();
         
+        // スタート前のメニューを表示
+        if (this.preGameMenu) {
+            this.preGameMenu.style.display = 'flex';
+        }
+        
     }
     
     /**
@@ -1565,7 +1576,7 @@ class SlotUI {
             const scoreLabel = type === 'correctAnswers' ? '正解数' : '連続正解数';
             
             html += `
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #333; ${rank <= 3 ? 'background: rgba(192, 0, 0, 0.2);' : ''}">
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; border-bottom: 1px solid #333; ${rank <= 3 ? 'background: rgba(192, 0, 0, 0.2);' : ''}">
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <span style="font-weight: bold; color: ${rank <= 3 ? '#ffff00' : '#ffd700'}; min-width: 20px;">${rank}位</span>
                         <span style="font-weight: bold; color: #ffd700;">${entry.playerName}</span>
@@ -1751,7 +1762,7 @@ class SlotUI {
         // ゲーム状態をリセット
         this.gameStarted = false;
         this.score = { totalQuestions: 0, consecutiveCorrect: 0, correctAnswers: 0, maxConsecutive: 0 };
-        this.timeLeft = 120;
+        this.timeLeft = 60;
         this.hasPlayedRankinGako = false; // ランクイン音再生フラグをリセット
         
         // タイマーをクリア
@@ -1779,6 +1790,11 @@ class SlotUI {
         this.stopButton.style.display = 'none';
         this.scoreDisplay.style.display = 'none';
         this.updateScoreDisplay();
+        
+        // スタート前のメニューを表示
+        if (this.preGameMenu) {
+            this.preGameMenu.style.display = 'flex';
+        }
         
         // 選択肢を非表示
         this.answerChoices.style.visibility = 'hidden';
@@ -1924,6 +1940,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (slotUI) {
             slotUI.importRankings();
+        }
+    };
+    
+    // スタート前の画面からランキング表示を呼び出す関数
+    window.showRankingsFromStartScreen = () => {
+        if (slotUI && slotUI.audio) {
+            slotUI.audio.playButtonPushedSound();
+        }
+        if (slotUI) {
+            slotUI.showRankings();
         }
     };
     

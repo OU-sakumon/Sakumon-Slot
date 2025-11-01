@@ -1108,6 +1108,13 @@
                 </div>
                 
                 <button id="startButton" class="start-button">スタート</button>
+                
+                <!-- スタート前のメニューボタン -->
+                <div class="pre-game-menu" style="display: flex; gap: 20px; justify-content: center; margin-top: 20px;">
+                    <button class="menu-button" onclick="showRankingsFromStartScreen()">
+                        📊 ランキング表示
+                    </button>
+                </div>
             
             <div class="slot-container">
                 <div class="slot-column">
@@ -1226,18 +1233,18 @@
 
     <!-- ランキング表示ポップアップ -->
     <div id="rankingPopup" class="result-popup" style="display: none;">
-        <div class="result-popup-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+        <div class="result-popup-content" style="max-width: 800px; overflow: visible;">
             <div class="result-title">ランキング</div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px;">
                 <div>
                     <h3 style="color: #ffd700; margin-bottom: 15px; text-align: center; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);">正解数ランキング</h3>
-                    <div id="correctAnswersRanking" style="background: #0a0a0a; padding: 20px; border-radius: 8px; border: 4px solid #ffd700; max-height: 500px; overflow-y: auto;">
+                    <div id="correctAnswersRanking" style="background: #0a0a0a; padding: 0; border-radius: 8px; border: 4px solid #ffd700; height: 375px; overflow-y: auto;">
                         <!-- ランキングデータはJavaScriptで動的生成 -->
                     </div>
                 </div>
                 <div>
                     <h3 style="color: #ffd700; margin-bottom: 15px; text-align: center; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);">連続正解数ランキング</h3>
-                    <div id="consecutiveAnswersRanking" style="background: #0a0a0a; padding: 20px; border-radius: 8px; border: 4px solid #ffd700; max-height: 500px; overflow-y: auto;">
+                    <div id="consecutiveAnswersRanking" style="background: #0a0a0a; padding: 0; border-radius: 8px; border: 4px solid #ffd700; height: 375px; overflow-y: auto;">
                         <!-- ランキングデータはJavaScriptで動的生成 -->
                     </div>
                 </div>
